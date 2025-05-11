@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect } from 'react';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
-import { useSSO } from '@clerk/clerk-expo';
+import { useSSO, useAuth } from '@clerk/clerk-expo';
+import { Redirect } from 'expo-router';
 import {
 	View,
 	Text,
@@ -26,6 +27,9 @@ WebBrowser.maybeCompleteAuthSession();
 export default function Page() {
 	useWarmUpBrowser();
 	const { startSSOFlow } = useSSO();
+	const { isSignedIn } = useAuth();
+
+	if (isSignedIn) return <Redirect href="/" />;
 
 	const handleSSO = useCallback(
 		(strategy: 'oauth_google' | 'oauth_apple') => async () => {
@@ -35,8 +39,8 @@ export default function Page() {
 					redirectUrl: AuthSession.makeRedirectUri()
 				});
 
-				if (createdSessionId) {
-					setActive!({ session: createdSessionId });
+				if (createdSessionId && setActive) {
+					setActive({ session: createdSessionId });
 				}
 			} catch (err) {
 				console.error(JSON.stringify(err, null, 2));
