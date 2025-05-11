@@ -9,9 +9,11 @@ import {
 	ScrollView,
 	Image,
 	TextInput,
-	Animated
+	Animated,
+	TouchableOpacity
 } from 'react-native';
 import { Search } from 'react-native-feather';
+import { useRouter } from 'expo-router';
 
 type MediaItemProps = {
 	title: string;
@@ -19,9 +21,14 @@ type MediaItemProps = {
 	isSelected?: boolean;
 };
 
-const MediaItem: React.FC<MediaItemProps> = ({ title, imageUrl, isSelected }) => {
+const MediaItem: React.FC<MediaItemProps & { onPress?: () => void }> = ({
+	title,
+	imageUrl,
+	isSelected,
+	onPress
+}) => {
 	return (
-		<View style={styles.mediaItem}>
+		<TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.mediaItem}>
 			<Image source={{ uri: imageUrl }} style={styles.mediaImage} />
 			{isSelected && (
 				<View style={styles.selectedBadge}>
@@ -31,13 +38,14 @@ const MediaItem: React.FC<MediaItemProps> = ({ title, imageUrl, isSelected }) =>
 			<Text style={styles.mediaTitle} numberOfLines={2}>
 				{title}
 			</Text>
-		</View>
+		</TouchableOpacity>
 	);
 };
 
 const HEADER_HEIGHT = 60;
 
 const App = () => {
+	const router = useRouter();
 	const { data: trendingTv, isLoading: isTrendingTvLoading } = useQuery({
 		queryKey: ['trending-tv'],
 		queryFn: async () => {
@@ -124,7 +132,9 @@ const App = () => {
 									key={`${t.id}-${i}`}
 									title={t.titleText.text}
 									imageUrl={t.primaryImage?.url ?? placeholder.toString()}
-									// isSelected={i === 0}
+									onPress={() =>
+										router.push({ pathname: '/show-detail/[id]', params: { id: t.id } })
+									}
 								/>
 							);
 						})}
@@ -147,6 +157,9 @@ const App = () => {
 									key={`${m.id}-${i}`}
 									title={m.titleText.text}
 									imageUrl={m.primaryImage?.url ?? placeholder.toString()}
+									onPress={() =>
+										router.push({ pathname: '/show-detail/[id]', params: { id: m.id } })
+									}
 								/>
 							);
 						})}

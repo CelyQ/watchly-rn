@@ -18,6 +18,7 @@ export default function RootLayoutNav() {
 						}}
 					>
 						<Stack.Screen name="(tabs)" />
+						<Stack.Screen name="show-detail" />
 					</Stack>
 				</SignedIn>
 				<SignedOut>
