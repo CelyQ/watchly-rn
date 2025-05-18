@@ -1,8 +1,20 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import {
+	View,
+	Text,
+	Image,
+	StyleSheet,
+	ScrollView,
+	TouchableOpacity,
+	ActivityIndicator
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import type { RapidAPIIMDBSearchResponseDataEntity } from '@/types/rapidapi.type';
+import type {
+	RapidAPIIMDBOverviewResponseData,
+	RapidAPIIMDBSearchResponseDataEntity,
+	RapidAPIIMDBTitleGetBaseResponseData
+} from '@/types/rapidapi.type';
 import { ArrowLeft } from 'react-native-feather';
+import { useQuery } from '@tanstack/react-query';
 
 // Dummy data for preview; replace with real data fetching logic
 const dummyShow: RapidAPIIMDBSearchResponseDataEntity = {
@@ -59,14 +71,70 @@ const dummyShow: RapidAPIIMDBSearchResponseDataEntity = {
 	]
 };
 
+const ShowDetailSkeleton: React.FC<{ router: ReturnType<typeof useRouter> }> = ({ router }) => {
+	return (
+		<ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+			<View style={styles.header}>
+				<TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+					<ArrowLeft stroke="#fff" width={28} height={28} />
+				</TouchableOpacity>
+				<View style={[styles.poster, { backgroundColor: '#222' }]} />
+			</View>
+			<View style={styles.content}>
+				<View style={[styles.skeletonTitle, { backgroundColor: '#222', width: '70%' }]} />
+				<View style={styles.genresRow}>
+					{[1, 2, 3].map((i) => (
+						<View key={i} style={[styles.genreTag, { backgroundColor: '#222' }]}>
+							<View style={{ width: 60, height: 14, backgroundColor: '#333' }} />
+						</View>
+					))}
+				</View>
+				<View style={[styles.skeletonText, { backgroundColor: '#222', width: '40%' }]} />
+				<View
+					style={[styles.skeletonText, { backgroundColor: '#222', width: '100%', height: 100 }]}
+				/>
+				<View style={styles.section}>
+					<View style={[styles.skeletonText, { backgroundColor: '#222', width: '30%' }]} />
+					<View style={styles.seasonsRow}>
+						{[1, 2].map((i) => (
+							<View key={i} style={[styles.seasonCard, { backgroundColor: '#222' }]}>
+								<View style={{ width: 80, height: 20, backgroundColor: '#333' }} />
+							</View>
+						))}
+					</View>
+				</View>
+			</View>
+		</ScrollView>
+	);
+};
+
 const ShowDetail: React.FC = () => {
 	// In a real app, get the show/movie ID from params and fetch data
 	// const { id } = useLocalSearchParams();
 	// Fetch show/movie details using the id
 	const router = useRouter();
 	const { id } = useLocalSearchParams();
-	console.log({ id });
-	const show = dummyShow; // Replace with fetched data
+
+	const { data, isLoading } = useQuery({
+		queryKey: ['show-detail', id],
+		queryFn: async () => {
+			const response = await fetch(
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/search/imdb/${id}`
+			);
+
+			if (response.status === 429) {
+				throw new Error('Rate limit exceeded');
+			}
+
+			const data = (await response.json()) as {
+				overview: RapidAPIIMDBOverviewResponseData['data']['title'];
+			};
+
+			return data.overview;
+		}
+	});
+
+	if (isLoading) return <ShowDetailSkeleton router={router} />;
 
 	return (
 		<ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -74,22 +142,21 @@ const ShowDetail: React.FC = () => {
 				<TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
 					<ArrowLeft stroke="#fff" width={28} height={28} />
 				</TouchableOpacity>
-				<Image source={{ uri: show.primaryImage?.url }} style={styles.poster} resizeMode="cover" />
+				<Image source={{ uri: data?.primaryImage?.url }} style={styles.poster} resizeMode="cover" />
 			</View>
 			<View style={styles.content}>
-				<Text style={styles.title}>{show.titleText.text}</Text>
+				<Text style={styles.title}>{data?.titleText?.text}</Text>
 				<View style={styles.genresRow}>
-					{show.titleType.categories.map((cat) => (
+					{data?.titleType?.categories.map((cat) => (
 						<View key={cat.id} style={styles.genreTag}>
 							<Text style={styles.genreText}>{cat.text}</Text>
 						</View>
 					))}
 				</View>
-				<Text style={styles.rating}>⭐ 4.33 (3,377 votes)</Text>
-				<Text style={styles.description}>
-					They say whatever doesn't kill you makes you stronger, but that's not the case for the
-					world's weakest hunter Sung Jinwoo. After being brutally s...
+				<Text style={styles.rating}>
+					⭐ {data?.ratingsSummary?.aggregateRating} ({data?.ratingsSummary?.voteCount} votes)
 				</Text>
+				<Text style={styles.description}>{data?.plot?.plotText?.plainText}</Text>
 				<View style={styles.section}>
 					<Text style={styles.sectionTitle}>Seasons</Text>
 					<View style={styles.seasonsRow}>
@@ -130,8 +197,7 @@ const styles = StyleSheet.create({
 	poster: {
 		width: '100%',
 		height: 340,
-		borderBottomLeftRadius: 30,
-		borderBottomRightRadius: 30
+		resizeMode: 'cover'
 	},
 	content: {
 		paddingHorizontal: 24,
@@ -195,6 +261,16 @@ const styles = StyleSheet.create({
 		color: '#fff',
 		fontSize: 16,
 		fontWeight: '600'
+	},
+	skeletonTitle: {
+		height: 40,
+		borderRadius: 8,
+		marginBottom: 10
+	},
+	skeletonText: {
+		height: 20,
+		borderRadius: 4,
+		marginBottom: 16
 	}
 });
 
