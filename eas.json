@@ -16,7 +16,11 @@
 		}
 	},
 	"submit": {
-		"development": {},
+		"development": {
+			"ios": {
+				"appleId": "paul.opmann@kakao.com"
+			}
+		},
 		"production": {}
 	}
 }
