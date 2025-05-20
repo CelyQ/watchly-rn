@@ -8,30 +8,45 @@ import {
 	View,
 	ScrollView,
 	Animated,
+	Pressable,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { MediaItem } from "@/components/media-item";
+import { useAuth } from "@clerk/clerk-expo";
 
 const HEADER_HEIGHT = 60;
 
 const Index = () => {
 	const router = useRouter();
+	const { getToken } = useAuth();
+
 	const { data: myShows, isLoading: isMyShowsLoading } = useQuery({
 		queryKey: ["my-shows"],
 		queryFn: async () => {
+			const token = await getToken();
+
 			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/user/shows`,
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/saved`,
+				{
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+				},
 			);
 
 			if (response.status === 429) {
 				throw new Error("Rate limit exceeded");
 			}
 
-			const data = (await response.json()) as {
-				shows: RapidAPIIMDBSearchResponseDataEntity[];
-			};
+			// const data = (await response.json()) as {
+			// 	movies: RapidAPIIMDBSearchResponseDataEntity[];
+			// };
 
-			return data.shows ?? null;
+			// console.log(data);
+
+			// return data.movies ?? [];
+			return [] as RapidAPIIMDBSearchResponseDataEntity[];
 		},
 		retry: true,
 	});
@@ -39,8 +54,16 @@ const Index = () => {
 	const { data: myMovies, isLoading: isMyMoviesLoading } = useQuery({
 		queryKey: ["my-movies"],
 		queryFn: async () => {
+			const token = await getToken();
+
 			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/user/movies`,
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/saved`,
+				{
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+				},
 			);
 
 			if (response.status === 429) {
@@ -48,10 +71,12 @@ const Index = () => {
 			}
 
 			const data = (await response.json()) as {
-				movies: RapidAPIIMDBSearchResponseDataEntity[];
+				movies: {
+					overview: RapidAPIIMDBSearchResponseDataEntity;
+				}[];
 			};
 
-			return data.movies ?? null;
+			return data.movies.map((m) => m.overview);
 		},
 		retry: true,
 	});
@@ -78,6 +103,18 @@ const Index = () => {
 						{isMyShowsLoading && (
 							<Text style={styles.loadingText}>Loading...</Text>
 						)}
+						{!isMyShowsLoading && (!myShows || myShows.length === 0) && (
+							<View style={styles.emptyStateContainer}>
+								<Text style={styles.emptyStateText}>
+									Your shows list is empty
+								</Text>
+								<Pressable onPress={() => router.push("/discover")}>
+									<Text style={styles.discoveryLinkText}>
+										Discover new shows →
+									</Text>
+								</Pressable>
+							</View>
+						)}
 						{myShows?.map((t, i) => {
 							const placeholder = new URL(
 								"https://via.placeholder.com/150x225/333/fff",
@@ -87,8 +124,8 @@ const Index = () => {
 							return (
 								<MediaItem
 									key={`${t.id}-${i}`}
-									title={t.titleText.text}
-									imageUrl={t.primaryImage?.url ?? placeholder.toString()}
+									title={t?.titleText?.text ?? ""}
+									imageUrl={t?.primaryImage?.url ?? placeholder.toString()}
 									onPress={() =>
 										router.push({
 											pathname: "/show-detail/[id]",
@@ -113,16 +150,29 @@ const Index = () => {
 						{isMyMoviesLoading && (
 							<Text style={styles.loadingText}>Loading...</Text>
 						)}
+						{!isMyMoviesLoading && (!myMovies || myMovies.length === 0) && (
+							<View style={styles.emptyStateContainer}>
+								<Text style={styles.emptyStateText}>
+									Your movies list is empty
+								</Text>
+								<Pressable onPress={() => router.push("/discover")}>
+									<Text style={styles.discoveryLinkText}>
+										Discover new movies →
+									</Text>
+								</Pressable>
+							</View>
+						)}
 						{myMovies?.map((m, i) => {
+							console.log("Movie object keys:", Object.keys(m));
 							const placeholder = new URL(
 								"https://via.placeholder.com/150x225/333/fff",
 							);
-							placeholder.searchParams.set("text", m.titleText.text);
+							placeholder.searchParams.set("text", m?.titleText?.text ?? "");
 
 							return (
 								<MediaItem
 									key={`${m.id}-${i}`}
-									title={m.titleText.text}
+									title={m?.titleText?.text ?? ""}
 									imageUrl={m.primaryImage?.url ?? placeholder.toString()}
 									onPress={() =>
 										router.push({
@@ -171,6 +221,21 @@ const styles = StyleSheet.create({
 		color: "#fff",
 		fontSize: 16,
 		fontWeight: "500",
+	},
+	emptyStateContainer: {
+		padding: 20,
+		alignItems: "center",
+	},
+	emptyStateText: {
+		color: "#666",
+		fontSize: 16,
+		marginBottom: 10,
+	},
+	discoveryLinkText: {
+		color: "#fff",
+		fontSize: 16,
+		fontWeight: "500",
+		textDecorationLine: "underline",
 	},
 });
 

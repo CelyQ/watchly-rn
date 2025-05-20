@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { RapidAPIIMDBOverviewResponseData } from "@/types/rapidapi.type";
-import { ArrowLeft } from "react-native-feather";
+import { ArrowLeft, Plus, Bookmark } from "react-native-feather";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-expo";
 
@@ -115,6 +115,58 @@ const ShowDetail: React.FC = () => {
 		},
 	});
 
+	const handleMarkAsWatched = async () => {
+		try {
+			const token = await getToken();
+			const response = await fetch(
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/save`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						imdbId: id,
+						status: "WATCHED",
+					}),
+				},
+			);
+
+			if (!response.ok) {
+				throw new Error("Failed to mark as watched");
+			}
+		} catch (error) {
+			console.error("Error marking as watched:", error);
+		}
+	};
+
+	const handleSave = async () => {
+		try {
+			const token = await getToken();
+			const response = await fetch(
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/save`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						imdbId: id,
+						status: "PLAN_TO_WATCH",
+					}),
+				},
+			);
+
+			if (!response.ok) {
+				throw new Error("Failed to save");
+			}
+		} catch (error) {
+			console.error("Error saving:", error);
+		}
+	};
+
 	if (isLoading) return <ShowDetailSkeleton router={router} />;
 
 	return (
@@ -134,6 +186,15 @@ const ShowDetail: React.FC = () => {
 					style={styles.poster}
 					resizeMode="cover"
 				/>
+				<View style={styles.actionButtons}>
+					<TouchableOpacity
+						style={[styles.actionButton, styles.saveButton]}
+						onPress={handleSave}
+					>
+						<Bookmark stroke="#fff" width={20} height={20} />
+						<Text style={styles.actionButtonText}>Save</Text>
+					</TouchableOpacity>
+				</View>
 			</View>
 			<View style={styles.content}>
 				<Text style={styles.title}>{data?.titleText?.text}</Text>
@@ -151,7 +212,13 @@ const ShowDetail: React.FC = () => {
 				<Text style={styles.description}>
 					{data?.plot?.plotText?.plainText}
 				</Text>
-				{data?.titleType?.isSeries && (
+				<TouchableOpacity
+					style={styles.markWatchedButton}
+					onPress={handleMarkAsWatched}
+				>
+					<Text style={styles.markWatchedButtonText}>Mark as Watched</Text>
+				</TouchableOpacity>
+				{/* {data?.titleType?.isSeries && (
 					<View style={styles.section}>
 						<Text style={styles.sectionTitle}>Seasons</Text>
 						<View style={styles.seasonsRow}>
@@ -163,7 +230,7 @@ const ShowDetail: React.FC = () => {
 							</View>
 						</View>
 					</View>
-				)}
+				)} */}
 			</View>
 		</ScrollView>
 	);
@@ -197,13 +264,55 @@ const styles = StyleSheet.create({
 	},
 	content: {
 		paddingHorizontal: 24,
-		marginTop: 24,
+		marginTop: 56,
+	},
+	titleRow: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "center",
+		marginBottom: 10,
 	},
 	title: {
 		color: "#fff",
 		fontSize: 32,
 		fontWeight: "bold",
-		marginBottom: 10,
+		flex: 1,
+		marginRight: 16,
+	},
+	actionButtons: {
+		position: "absolute",
+		right: 20,
+		bottom: -20,
+		zIndex: 2,
+		flexDirection: "row",
+		gap: 4,
+	},
+	actionButton: {
+		flexDirection: "row",
+		alignItems: "center",
+		paddingHorizontal: 16,
+		paddingVertical: 8,
+		borderRadius: 20,
+		shadowColor: "#000",
+		shadowOffset: {
+			width: 0,
+			height: 2,
+		},
+		shadowOpacity: 0.25,
+		shadowRadius: 3.84,
+		elevation: 5,
+	},
+	saveButton: {
+		backgroundColor: "#3c3c3c",
+	},
+	watchedButton: {
+		backgroundColor: "#b14aed",
+	},
+	actionButtonText: {
+		color: "#fff",
+		fontSize: 16,
+		fontWeight: "600",
+		marginLeft: 4,
 	},
 	genresRow: {
 		flexDirection: "row",
@@ -267,6 +376,21 @@ const styles = StyleSheet.create({
 		height: 20,
 		borderRadius: 4,
 		marginBottom: 16,
+	},
+	markWatchedButton: {
+		backgroundColor: "#3c3c3c",
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "center",
+		paddingVertical: 12,
+		borderRadius: 10,
+		marginBottom: 24,
+	},
+	markWatchedButtonText: {
+		color: "#fff",
+		fontSize: 16,
+		fontWeight: "600",
+		marginLeft: 8,
 	},
 });
 
