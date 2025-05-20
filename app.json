@@ -29,15 +29,7 @@
 		"web": {
 			"favicon": "./assets/favicon.png"
 		},
-		"plugins": [
-			"expo-router",
-			[
-				"expo-dev-client",
-				{
-					"launchMode": "most-recent"
-				}
-			]
-		],
+		"plugins": ["expo-router"],
 		"extra": {
 			"router": {
 				"origin": false
