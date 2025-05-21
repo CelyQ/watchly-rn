@@ -1,0 +1,24 @@
+{
+	"cli": {
+		"version": ">= 5.9.1"
+	},
+	"build": {
+		"development": {
+			"developmentClient": true,
+			"distribution": "internal"
+		},
+		"preview": {
+			"distribution": "internal"
+		},
+		"production": {}
+	},
+	"submit": {
+		"production": {
+			"ios": {
+				"appleId": "paul.opmann@kakao.com",
+				"ascAppId": "6746103299",
+				"appleTeamId": "4AUMP5F68Z"
+			}
+		}
+	}
+}
