@@ -5,12 +5,14 @@ import {
 	StyleSheet,
 	ScrollView,
 	TouchableOpacity,
+	Animated,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { RapidAPIIMDBOverviewResponseData } from "@/types/rapidapi.type";
-import { ArrowLeft, Plus, Bookmark } from "react-native-feather";
-import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Bookmark } from "react-native-feather";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-expo";
+import React from "react";
 
 const ShowDetailSkeleton: React.FC<{
 	router: ReturnType<typeof useRouter>;
@@ -89,6 +91,188 @@ const ShowDetail: React.FC = () => {
 	const router = useRouter();
 	const { id } = useLocalSearchParams();
 	const { getToken } = useAuth();
+	const queryClient = useQueryClient();
+	const pulseAnim = new Animated.Value(1);
+
+	const { data: status } = useQuery({
+		queryKey: ["show-status", id],
+		queryFn: async () => {
+			const token = await getToken();
+			const response = await fetch(
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/status/${id}`,
+				{
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+				},
+			);
+
+			if (response.status === 200) {
+				const { status } = (await response.json()) as {
+					status: "WATCHED" | "PLAN_TO_WATCH" | null;
+				};
+				return status;
+			}
+
+			return null;
+		},
+	});
+
+	const { mutateAsync: save, isPending: isSaving } = useMutation({
+		mutationFn: async () => {
+			const token = await getToken();
+			const type = isSeries ? "tv" : "movie";
+			const response = await fetch(
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						imdbId: id,
+						status: "PLAN_TO_WATCH",
+					}),
+				},
+			);
+
+			if (!response.ok) {
+				throw new Error("Failed to save");
+			}
+
+			return response.json();
+		},
+		onSuccess: () => {
+			queryClient.setQueryData(["show-status", id], "PLAN_TO_WATCH");
+			queryClient.invalidateQueries({
+				queryKey: isSeries ? ["my-shows"] : ["my-movies"],
+			});
+		},
+	});
+
+	const { mutateAsync: unsave, isPending: isUnsaving } = useMutation({
+		mutationFn: async () => {
+			const token = await getToken();
+			const type = isSeries ? "tv" : "movie";
+			const response = await fetch(
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${token}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						imdbId: id,
+						status: null,
+					}),
+				},
+			);
+
+			if (!response.ok) {
+				throw new Error("Failed to unsave");
+			}
+
+			return response.json();
+		},
+		onSuccess: () => {
+			queryClient.setQueryData(["show-status", id], null);
+			queryClient.invalidateQueries({
+				queryKey: isSeries ? ["my-shows"] : ["my-movies"],
+			});
+		},
+	});
+
+	const { mutateAsync: markAsWatched, isPending: isMarkingAsWatched } =
+		useMutation({
+			mutationFn: async () => {
+				const token = await getToken();
+				const type = isSeries ? "tv" : "movie";
+				const response = await fetch(
+					`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
+					{
+						method: "POST",
+						headers: {
+							Authorization: `Bearer ${token}`,
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({
+							imdbId: id,
+							status: "WATCHED",
+						}),
+					},
+				);
+
+				if (!response.ok) {
+					throw new Error("Failed to mark as watched");
+				}
+
+				return response.json();
+			},
+			onSuccess: () => {
+				queryClient.setQueryData(["show-status", id], "WATCHED");
+				queryClient.invalidateQueries({
+					queryKey: isSeries ? ["my-shows"] : ["my-movies"],
+				});
+			},
+		});
+
+	const { mutateAsync: removeFromWatched, isPending: isRemovingFromWatched } =
+		useMutation({
+			mutationFn: async () => {
+				const token = await getToken();
+				const type = isSeries ? "tv" : "movie";
+				const response = await fetch(
+					`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
+					{
+						method: "POST",
+						headers: {
+							Authorization: `Bearer ${token}`,
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({
+							imdbId: id,
+							status: "PLAN_TO_WATCH",
+						}),
+					},
+				);
+
+				if (!response.ok) {
+					throw new Error("Failed to remove from watched");
+				}
+
+				return response.json();
+			},
+			onSuccess: () => {
+				queryClient.setQueryData(["show-status", id], "PLAN_TO_WATCH");
+				queryClient.invalidateQueries({
+					queryKey: isSeries ? ["my-shows"] : ["my-movies"],
+				});
+			},
+		});
+
+	React.useEffect(() => {
+		if (isSaving || isUnsaving) {
+			Animated.loop(
+				Animated.sequence([
+					Animated.timing(pulseAnim, {
+						toValue: 0.5,
+						duration: 1500,
+						useNativeDriver: true,
+					}),
+					Animated.timing(pulseAnim, {
+						toValue: 1,
+						duration: 1500,
+						useNativeDriver: true,
+					}),
+				]),
+			).start();
+		} else {
+			pulseAnim.setValue(1);
+		}
+	}, [isSaving, isUnsaving, pulseAnim]);
 
 	const { data, isLoading } = useQuery({
 		queryKey: ["show-detail", id],
@@ -115,57 +299,7 @@ const ShowDetail: React.FC = () => {
 		},
 	});
 
-	const handleMarkAsWatched = async () => {
-		try {
-			const token = await getToken();
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/save`,
-				{
-					method: "POST",
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						imdbId: id,
-						status: "WATCHED",
-					}),
-				},
-			);
-
-			if (!response.ok) {
-				throw new Error("Failed to mark as watched");
-			}
-		} catch (error) {
-			console.error("Error marking as watched:", error);
-		}
-	};
-
-	const handleSave = async () => {
-		try {
-			const token = await getToken();
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/save`,
-				{
-					method: "POST",
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						imdbId: id,
-						status: "PLAN_TO_WATCH",
-					}),
-				},
-			);
-
-			if (!response.ok) {
-				throw new Error("Failed to save");
-			}
-		} catch (error) {
-			console.error("Error saving:", error);
-		}
-	};
+	const isSeries = data?.titleType?.isSeries;
 
 	if (isLoading) return <ShowDetailSkeleton router={router} />;
 
@@ -187,13 +321,30 @@ const ShowDetail: React.FC = () => {
 					resizeMode="cover"
 				/>
 				<View style={styles.actionButtons}>
-					<TouchableOpacity
-						style={[styles.actionButton, styles.saveButton]}
-						onPress={handleSave}
-					>
-						<Bookmark stroke="#fff" width={20} height={20} />
-						<Text style={styles.actionButtonText}>Save</Text>
-					</TouchableOpacity>
+					{status === "PLAN_TO_WATCH" && (
+						<Animated.View style={{ opacity: pulseAnim }}>
+							<TouchableOpacity
+								style={[styles.actionButton, styles.savedButton]}
+								onPress={() => unsave()}
+								disabled={isUnsaving}
+							>
+								<Bookmark stroke="#fff" width={20} height={20} />
+								<Text style={styles.actionButtonText}>Remove</Text>
+							</TouchableOpacity>
+						</Animated.View>
+					)}
+					{status !== "PLAN_TO_WATCH" && status !== "WATCHED" && (
+						<Animated.View style={{ opacity: pulseAnim }}>
+							<TouchableOpacity
+								style={[styles.actionButton, styles.saveButton]}
+								onPress={() => save()}
+								disabled={isSaving}
+							>
+								<Bookmark stroke="#fff" width={20} height={20} />
+								<Text style={styles.actionButtonText}>Save</Text>
+							</TouchableOpacity>
+						</Animated.View>
+					)}
 				</View>
 			</View>
 			<View style={styles.content}>
@@ -212,25 +363,27 @@ const ShowDetail: React.FC = () => {
 				<Text style={styles.description}>
 					{data?.plot?.plotText?.plainText}
 				</Text>
-				<TouchableOpacity
-					style={styles.markWatchedButton}
-					onPress={handleMarkAsWatched}
-				>
-					<Text style={styles.markWatchedButtonText}>Mark as Watched</Text>
-				</TouchableOpacity>
-				{/* {data?.titleType?.isSeries && (
-					<View style={styles.section}>
-						<Text style={styles.sectionTitle}>Seasons</Text>
-						<View style={styles.seasonsRow}>
-							<View style={styles.seasonCard}>
-								<Text style={styles.seasonText}>Season 1</Text>
-							</View>
-							<View style={styles.seasonCard}>
-								<Text style={styles.seasonText}>Specials</Text>
-							</View>
-						</View>
-					</View>
-				)} */}
+				{status === "WATCHED" ? (
+					<TouchableOpacity
+						style={[styles.markWatchedButton, styles.removeWatchedButton]}
+						onPress={() => removeFromWatched()}
+						disabled={isRemovingFromWatched}
+					>
+						<Text style={styles.markWatchedButtonText}>
+							{isRemovingFromWatched ? "Removing..." : "Remove from Watched"}
+						</Text>
+					</TouchableOpacity>
+				) : (
+					<TouchableOpacity
+						style={styles.markWatchedButton}
+						onPress={() => markAsWatched()}
+						disabled={isMarkingAsWatched}
+					>
+						<Text style={styles.markWatchedButtonText}>
+							{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
+						</Text>
+					</TouchableOpacity>
+				)}
 			</View>
 		</ScrollView>
 	);
@@ -304,6 +457,12 @@ const styles = StyleSheet.create({
 	},
 	saveButton: {
 		backgroundColor: "#3c3c3c",
+	},
+	savedButton: {
+		backgroundColor: "#b14aed",
+	},
+	disabledButton: {
+		opacity: 1,
 	},
 	watchedButton: {
 		backgroundColor: "#b14aed",
@@ -391,6 +550,9 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		fontWeight: "600",
 		marginLeft: 8,
+	},
+	removeWatchedButton: {
+		backgroundColor: "#ff4444",
 	},
 });
 

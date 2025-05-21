@@ -42,7 +42,6 @@ const App = () => {
 			const data = (await response.json()) as {
 				tvshows: RapidAPIIMDBSearchResponseDataEntity[];
 			};
-			console.log({ data });
 			return data.tvshows ?? null;
 		},
 		retry: true,
@@ -52,7 +51,6 @@ const App = () => {
 			queryKey: ["trending-movies"],
 			queryFn: async () => {
 				const token = await getToken();
-				console.log({ token });
 				const response = await fetch(
 					`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/trending`,
 					{

@@ -26,7 +26,7 @@ const Index = () => {
 			const token = await getToken();
 
 			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/saved`,
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/tv/saved`,
 				{
 					headers: {
 						Authorization: `Bearer ${token}`,
@@ -39,14 +39,13 @@ const Index = () => {
 				throw new Error("Rate limit exceeded");
 			}
 
-			// const data = (await response.json()) as {
-			// 	movies: RapidAPIIMDBSearchResponseDataEntity[];
-			// };
+			const data = (await response.json()) as {
+				tvShows: {
+					overview: RapidAPIIMDBSearchResponseDataEntity;
+				}[];
+			};
 
-			// console.log(data);
-
-			// return data.movies ?? [];
-			return [] as RapidAPIIMDBSearchResponseDataEntity[];
+			return data.tvShows.map((t) => t.overview);
 		},
 		retry: true,
 	});
@@ -163,7 +162,6 @@ const Index = () => {
 							</View>
 						)}
 						{myMovies?.map((m, i) => {
-							console.log("Movie object keys:", Object.keys(m));
 							const placeholder = new URL(
 								"https://via.placeholder.com/150x225/333/fff",
 							);
