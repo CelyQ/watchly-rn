@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect } from 'react';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import { useSSO, useAuth } from '@clerk/clerk-expo';
-import { Redirect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import * as AuthSession from "expo-auth-session";
+import { useSSO, useAuth } from "@clerk/clerk-expo";
+import { Redirect } from "expo-router";
 import {
 	View,
 	Text,
@@ -10,8 +10,9 @@ import {
 	StyleSheet,
 	SafeAreaView,
 	Image,
-	Platform
-} from 'react-native';
+	Platform,
+	Alert,
+} from "react-native";
 
 export const useWarmUpBrowser = () => {
 	useEffect(() => {
@@ -28,25 +29,33 @@ export default function Page() {
 	useWarmUpBrowser();
 	const { startSSOFlow } = useSSO();
 	const { isSignedIn } = useAuth();
+	const [isLoading, setIsLoading] = useState(false);
 
 	if (isSignedIn) return <Redirect href="/" />;
 
 	const handleSSO = useCallback(
-		(strategy: 'oauth_google' | 'oauth_apple') => async () => {
+		(strategy: "oauth_google" | "oauth_apple") => async () => {
 			try {
+				setIsLoading(true);
 				const { createdSessionId, setActive } = await startSSOFlow({
 					strategy,
-					redirectUrl: AuthSession.makeRedirectUri()
+					redirectUrl: AuthSession.makeRedirectUri(),
 				});
 
 				if (createdSessionId && setActive) {
-					setActive({ session: createdSessionId });
+					await setActive({ session: createdSessionId });
 				}
 			} catch (err) {
-				console.error(JSON.stringify(err, null, 2));
+				console.error("SSO Error:", err);
+				Alert.alert(
+					"Sign In Error",
+					"There was a problem signing in. Please try again.",
+				);
+			} finally {
+				setIsLoading(false);
 			}
 		},
-		[startSSOFlow]
+		[startSSOFlow],
 	);
 
 	return (
@@ -54,15 +63,26 @@ export default function Page() {
 			<View style={styles.content}>
 				<Text style={styles.title}>Welcome</Text>
 				<Text style={styles.subtitle}>Sign in to continue</Text>
-				<TouchableOpacity style={styles.button} onPress={handleSSO('oauth_google')}>
+				<TouchableOpacity
+					style={[styles.button, isLoading && styles.buttonDisabled]}
+					onPress={handleSSO("oauth_google")}
+					disabled={isLoading}
+				>
 					<Text style={styles.buttonText}>Continue with Google</Text>
-					<Image source={require('@/assets/social/google.png')} style={styles.buttonIcon} />
+					<Image
+						source={require("@/assets/social/google.png")}
+						style={styles.buttonIcon}
+					/>
 				</TouchableOpacity>
-				{Platform.OS === 'ios' && (
-					<TouchableOpacity style={styles.button} onPress={handleSSO('oauth_apple')}>
+				{Platform.OS === "ios" && (
+					<TouchableOpacity
+						style={[styles.button, isLoading && styles.buttonDisabled]}
+						onPress={handleSSO("oauth_apple")}
+						disabled={isLoading}
+					>
 						<Text style={styles.buttonText}>Continue with Apple</Text>
 						<Image
-							source={require('@/assets/social/apple.png')}
+							source={require("@/assets/social/apple.png")}
 							style={[styles.buttonIcon, styles.buttonIconApple]}
 						/>
 					</TouchableOpacity>
@@ -75,46 +95,49 @@ export default function Page() {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#000',
-		justifyContent: 'center'
+		backgroundColor: "#000",
+		justifyContent: "center",
 	},
 	content: {
-		alignItems: 'center',
+		alignItems: "center",
 		// backgroundColor: 'rgba(17, 17, 17, 0.4)',
-		padding: 24
+		padding: 24,
 	},
 	title: {
 		fontSize: 28,
-		fontWeight: 'bold',
+		fontWeight: "bold",
 		marginBottom: 8,
-		color: '#fff'
+		color: "#fff",
 	},
 	subtitle: {
 		fontSize: 16,
-		color: '#666',
-		marginBottom: 32
+		color: "#666",
+		marginBottom: 32,
 	},
 	button: {
-		width: '100%',
+		width: "100%",
 		paddingVertical: 14,
 		borderRadius: 4,
-		alignItems: 'center',
+		alignItems: "center",
 		marginBottom: 16,
-		flexDirection: 'row',
-		justifyContent: 'center',
+		flexDirection: "row",
+		justifyContent: "center",
 		gap: 8,
-		backgroundColor: '#fff'
+		backgroundColor: "#fff",
+	},
+	buttonDisabled: {
+		opacity: 0.7,
 	},
 	buttonText: {
-		color: '#000',
+		color: "#000",
 		fontSize: 16,
-		fontWeight: '600'
+		fontWeight: "600",
 	},
 	buttonIcon: {
 		width: 24,
-		height: 24
+		height: 24,
 	},
 	buttonIconApple: {
-		transform: [{ translateY: -2 }]
-	}
+		transform: [{ translateY: -2 }],
+	},
 });

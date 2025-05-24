@@ -1,23 +1,38 @@
 {
 	"cli": {
-		"version": ">= 5.9.1"
+		"version": ">= 5.9.1",
+		"appVersionSource": "remote"
 	},
 	"build": {
 		"development": {
+			"distribution": "internal",
 			"developmentClient": true,
-			"distribution": "internal"
+			"ios": {
+				"buildConfiguration": "Debug"
+			}
 		},
 		"preview": {
-			"distribution": "internal"
+			"distribution": "internal",
+			"autoIncrement": false,
+			"ios": {
+				"buildConfiguration": "Release"
+			}
 		},
-		"production": {}
+		"production": {
+			"distribution": "store",
+			"autoIncrement": true,
+			"ios": {
+				"buildConfiguration": "Release"
+			}
+		}
 	},
 	"submit": {
 		"production": {
 			"ios": {
 				"appleId": "paul.opmann@kakao.com",
 				"ascAppId": "6746103299",
-				"appleTeamId": "4AUMP5F68Z"
+				"appleTeamId": "4AUMP5F68Z",
+				"bundleIdentifier": "com.popmann.watchly"
 			}
 		}
 	}

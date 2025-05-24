@@ -1,8 +1,8 @@
-name: Release iOS app
+name: Release iOS app to TestFlight
 
 on:
   push:
-    branches: ['*']
+    branches: ['main']
 
 jobs:
   build:

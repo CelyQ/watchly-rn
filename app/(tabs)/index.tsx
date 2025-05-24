@@ -13,17 +13,38 @@ import {
 import { useRouter } from "expo-router";
 import { MediaItem } from "@/components/media-item";
 import { useAuth } from "@clerk/clerk-expo";
+import { useEffect, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 
 const HEADER_HEIGHT = 60;
 
 const Index = () => {
 	const router = useRouter();
-	const { getToken } = useAuth();
+	const { getToken, isLoaded, isSignedIn } = useAuth();
+	const [isAuthReady, setIsAuthReady] = useState(false);
 
-	const { data: myShows, isLoading: isMyShowsLoading } = useQuery({
+	useEffect(() => {
+		if (isLoaded) {
+			setIsAuthReady(true);
+		}
+	}, [isLoaded]);
+
+	const {
+		data: myShows,
+		isLoading: isMyShowsLoading,
+		error: showsError,
+		refetch: refetchShows,
+	} = useQuery({
 		queryKey: ["my-shows"],
 		queryFn: async () => {
+			if (!isSignedIn) {
+				throw new Error("Not authenticated");
+			}
+
 			const token = await getToken();
+			if (!token) {
+				throw new Error("No auth token available");
+			}
 
 			const response = await fetch(
 				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/tv/saved`,
@@ -39,6 +60,10 @@ const Index = () => {
 				throw new Error("Rate limit exceeded");
 			}
 
+			if (!response.ok) {
+				throw new Error(`API error: ${response.status}`);
+			}
+
 			const data = (await response.json()) as {
 				tvShows: {
 					overview: RapidAPIIMDBSearchResponseDataEntity;
@@ -47,13 +72,26 @@ const Index = () => {
 
 			return data.tvShows.map((t) => t.overview);
 		},
-		retry: true,
+		retry: 2,
+		enabled: isAuthReady && isSignedIn,
 	});
 
-	const { data: myMovies, isLoading: isMyMoviesLoading } = useQuery({
+	const {
+		data: myMovies,
+		isLoading: isMyMoviesLoading,
+		error: moviesError,
+		refetch: refetchMovies,
+	} = useQuery({
 		queryKey: ["my-movies"],
 		queryFn: async () => {
+			if (!isSignedIn) {
+				throw new Error("Not authenticated");
+			}
+
 			const token = await getToken();
+			if (!token) {
+				throw new Error("No auth token available");
+			}
 
 			const response = await fetch(
 				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/saved`,
@@ -69,6 +107,10 @@ const Index = () => {
 				throw new Error("Rate limit exceeded");
 			}
 
+			if (!response.ok) {
+				throw new Error(`API error: ${response.status}`);
+			}
+
 			const data = (await response.json()) as {
 				movies: {
 					overview: RapidAPIIMDBSearchResponseDataEntity;
@@ -77,8 +119,40 @@ const Index = () => {
 
 			return data.movies.map((m) => m.overview);
 		},
-		retry: true,
+		retry: 2,
+		enabled: isAuthReady && isSignedIn,
 	});
+
+	useFocusEffect(
+		useCallback(() => {
+			if (isAuthReady && isSignedIn) {
+				void refetchShows();
+				void refetchMovies();
+			}
+		}, [isAuthReady, isSignedIn, refetchShows, refetchMovies]),
+	);
+
+	if (!isAuthReady) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<StatusBar barStyle="light-content" backgroundColor="#000" />
+				<View style={styles.loadingContainer}>
+					<Text style={styles.loadingText}>Loading...</Text>
+				</View>
+			</SafeAreaView>
+		);
+	}
+
+	if (!isSignedIn) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<StatusBar barStyle="light-content" backgroundColor="#000" />
+				<View style={styles.loadingContainer}>
+					<Text style={styles.loadingText}>Please sign in to continue</Text>
+				</View>
+			</SafeAreaView>
+		);
+	}
 
 	return (
 		<SafeAreaView style={styles.container}>
@@ -102,18 +176,27 @@ const Index = () => {
 						{isMyShowsLoading && (
 							<Text style={styles.loadingText}>Loading...</Text>
 						)}
-						{!isMyShowsLoading && (!myShows || myShows.length === 0) && (
-							<View style={styles.emptyStateContainer}>
-								<Text style={styles.emptyStateText}>
-									Your shows list is empty
+						{showsError && (
+							<View style={styles.errorContainer}>
+								<Text style={styles.errorText}>
+									Error loading shows: {showsError.message}
 								</Text>
-								<Pressable onPress={() => router.push("/discover")}>
-									<Text style={styles.discoveryLinkText}>
-										Discover new shows →
-									</Text>
-								</Pressable>
 							</View>
 						)}
+						{!isMyShowsLoading &&
+							!showsError &&
+							(!myShows || myShows.length === 0) && (
+								<View style={styles.emptyStateContainer}>
+									<Text style={styles.emptyStateText}>
+										Your shows list is empty
+									</Text>
+									<Pressable onPress={() => router.push("/discover")}>
+										<Text style={styles.discoveryLinkText}>
+											Discover new shows →
+										</Text>
+									</Pressable>
+								</View>
+							)}
 						{myShows?.map((t, i) => {
 							const placeholder = new URL(
 								"https://via.placeholder.com/150x225/333/fff",
@@ -149,18 +232,27 @@ const Index = () => {
 						{isMyMoviesLoading && (
 							<Text style={styles.loadingText}>Loading...</Text>
 						)}
-						{!isMyMoviesLoading && (!myMovies || myMovies.length === 0) && (
-							<View style={styles.emptyStateContainer}>
-								<Text style={styles.emptyStateText}>
-									Your movies list is empty
+						{moviesError && (
+							<View style={styles.errorContainer}>
+								<Text style={styles.errorText}>
+									Error loading movies: {moviesError.message}
 								</Text>
-								<Pressable onPress={() => router.push("/discover")}>
-									<Text style={styles.discoveryLinkText}>
-										Discover new movies →
-									</Text>
-								</Pressable>
 							</View>
 						)}
+						{!isMyMoviesLoading &&
+							!moviesError &&
+							(!myMovies || myMovies.length === 0) && (
+								<View style={styles.emptyStateContainer}>
+									<Text style={styles.emptyStateText}>
+										Your movies list is empty
+									</Text>
+									<Pressable onPress={() => router.push("/discover")}>
+										<Text style={styles.discoveryLinkText}>
+											Discover new movies →
+										</Text>
+									</Pressable>
+								</View>
+							)}
 						{myMovies?.map((m, i) => {
 							const placeholder = new URL(
 								"https://via.placeholder.com/150x225/333/fff",
@@ -220,6 +312,11 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		fontWeight: "500",
 	},
+	loadingContainer: {
+		flex: 1,
+		justifyContent: "center",
+		alignItems: "center",
+	},
 	emptyStateContainer: {
 		padding: 20,
 		alignItems: "center",
@@ -234,6 +331,15 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		fontWeight: "500",
 		textDecorationLine: "underline",
+	},
+	errorContainer: {
+		padding: 20,
+		alignItems: "center",
+	},
+	errorText: {
+		color: "#ff4444",
+		fontSize: 16,
+		textAlign: "center",
 	},
 });
 

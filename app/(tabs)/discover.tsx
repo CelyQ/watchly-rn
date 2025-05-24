@@ -1,3 +1,4 @@
+import React from "react";
 import type { RapidAPIIMDBSearchResponseDataEntity } from "@/types/rapidapi.type";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -10,17 +11,60 @@ import {
 	TextInput,
 	Animated,
 	TouchableOpacity,
+	Image,
 } from "react-native";
 import { Search } from "react-native-feather";
 import { useRouter } from "expo-router";
 import { MediaItem } from "@/components/media-item";
 import { useAuth } from "@clerk/clerk-expo";
+import { useState, useMemo } from "react";
 
 const HEADER_HEIGHT = 60;
+
+// Function to calculate string similarity (0 to 1)
+const calculateSimilarity = (str1: string, str2: string): number => {
+	const s1 = str1.toLowerCase();
+	const s2 = str2.toLowerCase();
+
+	// Exact match
+	if (s1 === s2) return 1;
+
+	// Contains match
+	if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+
+	// Calculate Levenshtein distance
+	const matrix: number[][] = [];
+
+	for (let i = 0; i <= s1.length; i++) {
+		matrix[i] = [i];
+	}
+
+	for (let j = 0; j <= s2.length; j++) {
+		matrix[0][j] = j;
+	}
+
+	for (let i = 1; i <= s1.length; i++) {
+		for (let j = 1; j <= s2.length; j++) {
+			if (s1[i - 1] === s2[j - 1]) {
+				matrix[i][j] = matrix[i - 1][j - 1];
+			} else {
+				matrix[i][j] = Math.min(
+					matrix[i - 1][j - 1] + 1,
+					matrix[i][j - 1] + 1,
+					matrix[i - 1][j] + 1,
+				);
+			}
+		}
+	}
+
+	const maxLength = Math.max(s1.length, s2.length);
+	return 1 - matrix[s1.length][s2.length] / maxLength;
+};
 
 const App = () => {
 	const router = useRouter();
 	const { getToken } = useAuth();
+	const [searchQuery, setSearchQuery] = useState("");
 
 	const { data: trendingTv, isLoading: isTrendingTvLoading } = useQuery({
 		queryKey: ["trending-tv"],
@@ -74,6 +118,40 @@ const App = () => {
 		},
 	);
 
+	const { data: searchResults, isLoading: isSearchLoading } = useQuery({
+		queryKey: ["search", searchQuery],
+		queryFn: async () => {
+			if (!searchQuery.trim()) return null;
+			const token = await getToken();
+			const response = await fetch(
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/search?q=${encodeURIComponent(searchQuery)}`,
+				{
+					headers: {
+						Authorization: `Bearer ${token}`,
+					},
+				},
+			);
+
+			if (response.status === 429) {
+				throw new Error("Rate limit exceeded");
+			}
+
+			const data = await response.json();
+			return data;
+		},
+		enabled: searchQuery.trim().length > 0,
+	});
+
+	const sortedSearchResults = useMemo(() => {
+		if (!searchResults || !searchQuery.trim()) return searchResults;
+
+		return [...searchResults].sort((a, b) => {
+			const similarityA = calculateSimilarity(a.titleText.text, searchQuery);
+			const similarityB = calculateSimilarity(b.titleText.text, searchQuery);
+			return similarityB - similarityA;
+		});
+	}, [searchResults, searchQuery]);
+
 	return (
 		<SafeAreaView style={styles.container}>
 			<StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -97,78 +175,138 @@ const App = () => {
 						style={styles.searchInput}
 						placeholder="Search"
 						placeholderTextColor="#999"
+						value={searchQuery}
+						onChangeText={setSearchQuery}
+						keyboardAppearance="dark"
+						selectionColor="#b14aed"
 					/>
 				</View>
-				<View style={styles.section}>
-					<Text style={styles.sectionLabel}>TRENDING</Text>
-					<Text style={styles.sectionTitle}>Shows</Text>
 
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						style={styles.mediaScroll}
-					>
-						{isTrendingTvLoading && (
-							<Text style={styles.loadingText}>Loading...</Text>
-						)}
-						{trendingTv?.map((t, i) => {
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", t.titleText.text);
+				{searchQuery.trim().length > 0 && (
+					<View style={styles.section}>
+						<Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
+						<Text style={styles.sectionTitle}>Found</Text>
 
-							return (
-								<MediaItem
-									key={`${t.id}-${i}`}
-									title={t.titleText.text}
-									imageUrl={t.primaryImage?.url ?? placeholder.toString()}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: t.id },
-										})
-									}
-								/>
-							);
-						})}
-					</ScrollView>
-				</View>
+						<View style={styles.searchResultsContainer}>
+							{isSearchLoading && (
+								<Text style={styles.loadingText}>Searching...</Text>
+							)}
+							{sortedSearchResults?.map(
+								(item: RapidAPIIMDBSearchResponseDataEntity, i: number) => {
+									const placeholder = new URL(
+										"https://via.placeholder.com/150x225/333/fff",
+									);
+									placeholder.searchParams.set("text", item.titleText.text);
 
-				{/* Trending Movies */}
-				<View style={styles.section}>
-					<Text style={styles.sectionLabel}>TRENDING</Text>
-					<Text style={styles.sectionTitle}>Movies</Text>
+									return (
+										<TouchableOpacity
+											key={`${item.id}-${i}`}
+											style={styles.searchResultItem}
+											onPress={() =>
+												router.push({
+													pathname: "/show-detail/[id]",
+													params: { id: item.id },
+												})
+											}
+										>
+											<Image
+												source={{
+													uri: item.primaryImage?.url ?? placeholder.toString(),
+												}}
+												style={styles.searchResultImage}
+											/>
+											<View style={styles.searchResultInfo}>
+												<Text style={styles.searchResultTitle}>
+													{item.titleText.text}
+												</Text>
+												{item.releaseYear && (
+													<Text style={styles.searchResultYear}>
+														{item.releaseYear.year}
+													</Text>
+												)}
+											</View>
+										</TouchableOpacity>
+									);
+								},
+							)}
+						</View>
+					</View>
+				)}
 
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						style={styles.mediaScroll}
-					>
-						{isTrendingMoviesLoading && (
-							<Text style={styles.loadingText}>Loading...</Text>
-						)}
-						{trendingMovies?.map((m, i) => {
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", m.titleText.text);
+				{searchQuery.trim().length === 0 && (
+					<>
+						<View style={styles.section}>
+							<Text style={styles.sectionLabel}>TRENDING</Text>
+							<Text style={styles.sectionTitle}>Shows</Text>
 
-							return (
-								<MediaItem
-									key={`${m.id}-${i}`}
-									title={m.titleText.text}
-									imageUrl={m.primaryImage?.url ?? placeholder.toString()}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: m.id },
-										})
-									}
-								/>
-							);
-						})}
-					</ScrollView>
-				</View>
+							<ScrollView
+								horizontal
+								showsHorizontalScrollIndicator={false}
+								style={styles.mediaScroll}
+							>
+								{isTrendingTvLoading && (
+									<Text style={styles.loadingText}>Loading...</Text>
+								)}
+								{trendingTv?.map((t, i) => {
+									const placeholder = new URL(
+										"https://via.placeholder.com/150x225/333/fff",
+									);
+									placeholder.searchParams.set("text", t.titleText.text);
+
+									return (
+										<MediaItem
+											key={`${t.id}-${i}`}
+											title={t.titleText.text}
+											imageUrl={t.primaryImage?.url ?? placeholder.toString()}
+											onPress={() =>
+												router.push({
+													pathname: "/show-detail/[id]",
+													params: { id: t.id },
+												})
+											}
+										/>
+									);
+								})}
+							</ScrollView>
+						</View>
+
+						{/* Trending Movies */}
+						<View style={styles.section}>
+							<Text style={styles.sectionLabel}>TRENDING</Text>
+							<Text style={styles.sectionTitle}>Movies</Text>
+
+							<ScrollView
+								horizontal
+								showsHorizontalScrollIndicator={false}
+								style={styles.mediaScroll}
+							>
+								{isTrendingMoviesLoading && (
+									<Text style={styles.loadingText}>Loading...</Text>
+								)}
+								{trendingMovies?.map((m, i) => {
+									const placeholder = new URL(
+										"https://via.placeholder.com/150x225/333/fff",
+									);
+									placeholder.searchParams.set("text", m.titleText.text);
+
+									return (
+										<MediaItem
+											key={`${m.id}-${i}`}
+											title={m.titleText.text}
+											imageUrl={m.primaryImage?.url ?? placeholder.toString()}
+											onPress={() =>
+												router.push({
+													pathname: "/show-detail/[id]",
+													params: { id: m.id },
+												})
+											}
+										/>
+									);
+								})}
+							</ScrollView>
+						</View>
+					</>
+				)}
 				<View style={{ height: 80 }} />
 			</Animated.ScrollView>
 		</SafeAreaView>
@@ -299,6 +437,35 @@ const styles = StyleSheet.create({
 		color: "#fff",
 		fontSize: 16,
 		fontWeight: "500",
+	},
+	searchResultsContainer: {
+		marginTop: 10,
+	},
+	searchResultItem: {
+		flexDirection: "row",
+		alignItems: "center",
+		marginBottom: 15,
+		backgroundColor: "#222",
+		borderRadius: 10,
+		overflow: "hidden",
+	},
+	searchResultImage: {
+		width: 80,
+		height: 120,
+	},
+	searchResultInfo: {
+		flex: 1,
+		padding: 15,
+	},
+	searchResultTitle: {
+		color: "#fff",
+		fontSize: 16,
+		fontWeight: "600",
+		marginBottom: 5,
+	},
+	searchResultYear: {
+		color: "#999",
+		fontSize: 14,
 	},
 });
 
