@@ -66,7 +66,11 @@ const App = () => {
 	const { getToken } = useAuth();
 	const [searchQuery, setSearchQuery] = useState("");
 
-	const { data: trendingTv, isLoading: isTrendingTvLoading } = useQuery({
+	const {
+		data: trendingTv,
+		isLoading: isTrendingTvLoading,
+		isError: isTrendingTvError,
+	} = useQuery({
 		queryKey: ["trending-tv"],
 		queryFn: async () => {
 			const token = await getToken();
@@ -246,6 +250,11 @@ const App = () => {
 							>
 								{isTrendingTvLoading && (
 									<Text style={styles.loadingText}>Loading...</Text>
+								)}
+								{isTrendingTvError && (
+									<Text style={styles.loadingText}>
+										Error loading trending shows
+									</Text>
 								)}
 								{trendingTv?.map((t, i) => {
 									const placeholder = new URL(
