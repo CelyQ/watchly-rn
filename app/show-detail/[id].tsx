@@ -7,6 +7,7 @@ import {
 	TouchableOpacity,
 	Animated,
 } from "react-native";
+import type { NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { RapidAPIIMDBOverviewResponseData } from "@/types/rapidapi.type";
 import { ArrowLeft, Bookmark } from "react-native-feather";
@@ -93,6 +94,11 @@ const ShowDetail: React.FC = () => {
 	const { getToken } = useAuth();
 	const queryClient = useQueryClient();
 	const pulseAnim = new Animated.Value(1);
+
+	// Animation values for sticky header
+	const scrollY = new Animated.Value(0);
+	const headerHeight = 340;
+	const maxHeaderHeight = 500;
 
 	const { data: status } = useQuery({
 		queryKey: ["show-status", id],
@@ -303,24 +309,87 @@ const ShowDetail: React.FC = () => {
 
 	if (isLoading) return <ShowDetailSkeleton router={router} />;
 
+	// Animation values for sticky header effects
+	const imageHeight = scrollY.interpolate({
+		inputRange: [-maxHeaderHeight, 0],
+		outputRange: [maxHeaderHeight, headerHeight],
+		extrapolate: "clamp",
+	});
+
+	const imageTranslateY = scrollY.interpolate({
+		inputRange: [0, headerHeight],
+		outputRange: [0, -headerHeight],
+		extrapolate: "clamp",
+	});
+
+	const headerOpacity = scrollY.interpolate({
+		inputRange: [0, headerHeight - 50],
+		outputRange: [0, 1],
+		extrapolate: "clamp",
+	});
+
+	const headerTranslateY = scrollY.interpolate({
+		inputRange: [0, headerHeight],
+		outputRange: [0, -headerHeight],
+		extrapolate: "clamp",
+	});
+
+	// Handle scroll events
+	const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+		const offsetY = event.nativeEvent.contentOffset.y;
+		scrollY.setValue(offsetY);
+	};
+
 	return (
-		<ScrollView
-			style={styles.container}
-			contentContainerStyle={{ paddingBottom: 40 }}
-		>
-			<View style={styles.header}>
+		<View style={styles.container}>
+			{/* Sticky Header with Title and Back Button */}
+			<Animated.View
+				style={[
+					styles.stickyHeader,
+					{
+						opacity: headerOpacity,
+						transform: [{ translateY: headerTranslateY }],
+					},
+				]}
+			>
 				<TouchableOpacity
-					style={styles.backButton}
+					style={styles.stickyBackButton}
+					onPress={() => router.back()}
+				>
+					<ArrowLeft stroke="#fff" width={24} height={24} />
+				</TouchableOpacity>
+				<Text style={styles.stickyTitle} numberOfLines={1}>
+					{data?.titleText?.text}
+				</Text>
+				<View style={styles.stickyHeaderSpacer} />
+			</Animated.View>
+
+			{/* Sticky Image Header - Scrolls until it reaches top, then sticks */}
+			<Animated.View
+				style={[
+					styles.stickyImageContainer,
+					{
+						height: imageHeight,
+						transform: [{ translateY: imageTranslateY }],
+					},
+				]}
+			>
+				<Image
+					source={{ uri: data?.primaryImage?.url }}
+					style={styles.stickyImage}
+					resizeMode="cover"
+				/>
+
+				{/* Back Button Overlay */}
+				<TouchableOpacity
+					style={styles.imageBackButton}
 					onPress={() => router.back()}
 				>
 					<ArrowLeft stroke="#fff" width={28} height={28} />
 				</TouchableOpacity>
-				<Image
-					source={{ uri: data?.primaryImage?.url }}
-					style={styles.poster}
-					resizeMode="cover"
-				/>
-				<View style={styles.actionButtons}>
+
+				{/* Action Buttons Overlay */}
+				<View style={styles.imageActionButtons}>
 					{status === "PLAN_TO_WATCH" && (
 						<Animated.View style={{ opacity: pulseAnim }}>
 							<TouchableOpacity
@@ -346,46 +415,62 @@ const ShowDetail: React.FC = () => {
 						</Animated.View>
 					)}
 				</View>
-			</View>
-			<View style={styles.content}>
-				<Text style={styles.title}>{data?.titleText?.text}</Text>
-				<View style={styles.genresRow}>
-					{data?.titleType?.categories.map((cat) => (
-						<View key={cat.id} style={styles.genreTag}>
-							<Text style={styles.genreText}>{cat.text}</Text>
-						</View>
-					))}
+			</Animated.View>
+
+			{/* Scrollable Content */}
+			<ScrollView
+				style={styles.scrollView}
+				contentContainerStyle={{ paddingBottom: 40 }}
+				onScroll={handleScroll}
+				scrollEventThrottle={16}
+				bounces={true}
+				alwaysBounceVertical={true}
+				showsVerticalScrollIndicator={false}
+			>
+				{/* Spacer to push content below sticky image */}
+				<View style={{ height: headerHeight }} />
+
+				{/* Content */}
+				<View style={styles.content}>
+					<Text style={styles.title}>{data?.titleText?.text}</Text>
+					<View style={styles.genresRow}>
+						{data?.titleType?.categories.map((cat) => (
+							<View key={cat.id} style={styles.genreTag}>
+								<Text style={styles.genreText}>{cat.text}</Text>
+							</View>
+						))}
+					</View>
+					<Text style={styles.rating}>
+						⭐ {data?.ratingsSummary?.aggregateRating} (
+						{data?.ratingsSummary?.voteCount} votes)
+					</Text>
+					<Text style={styles.description}>
+						{data?.plot?.plotText?.plainText}
+					</Text>
+					{status === "WATCHED" ? (
+						<TouchableOpacity
+							style={[styles.markWatchedButton, styles.removeWatchedButton]}
+							onPress={() => removeFromWatched()}
+							disabled={isRemovingFromWatched}
+						>
+							<Text style={styles.markWatchedButtonText}>
+								{isRemovingFromWatched ? "Removing..." : "Remove from Watched"}
+							</Text>
+						</TouchableOpacity>
+					) : (
+						<TouchableOpacity
+							style={styles.markWatchedButton}
+							onPress={() => markAsWatched()}
+							disabled={isMarkingAsWatched}
+						>
+							<Text style={styles.markWatchedButtonText}>
+								{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
+							</Text>
+						</TouchableOpacity>
+					)}
 				</View>
-				<Text style={styles.rating}>
-					⭐ {data?.ratingsSummary?.aggregateRating} (
-					{data?.ratingsSummary?.voteCount} votes)
-				</Text>
-				<Text style={styles.description}>
-					{data?.plot?.plotText?.plainText}
-				</Text>
-				{status === "WATCHED" ? (
-					<TouchableOpacity
-						style={[styles.markWatchedButton, styles.removeWatchedButton]}
-						onPress={() => removeFromWatched()}
-						disabled={isRemovingFromWatched}
-					>
-						<Text style={styles.markWatchedButtonText}>
-							{isRemovingFromWatched ? "Removing..." : "Remove from Watched"}
-						</Text>
-					</TouchableOpacity>
-				) : (
-					<TouchableOpacity
-						style={styles.markWatchedButton}
-						onPress={() => markAsWatched()}
-						disabled={isMarkingAsWatched}
-					>
-						<Text style={styles.markWatchedButtonText}>
-							{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
-						</Text>
-					</TouchableOpacity>
-				)}
-			</View>
-		</ScrollView>
+			</ScrollView>
+		</View>
 	);
 };
 
@@ -394,6 +479,71 @@ const styles = StyleSheet.create({
 		flex: 1,
 		backgroundColor: "#000",
 	},
+	scrollView: {
+		flex: 1,
+	},
+	// Sticky Header Styles
+	stickyHeader: {
+		position: "absolute",
+		top: 0,
+		left: 0,
+		right: 0,
+		height: 100,
+		backgroundColor: "rgba(0,0,0,0.9)",
+		flexDirection: "row",
+		alignItems: "center",
+		paddingHorizontal: 20,
+		paddingTop: 40,
+		zIndex: 10,
+	},
+	stickyBackButton: {
+		backgroundColor: "rgba(0,0,0,0.6)",
+		borderRadius: 20,
+		padding: 8,
+		marginRight: 16,
+	},
+	stickyTitle: {
+		color: "#fff",
+		fontSize: 18,
+		fontWeight: "bold",
+		flex: 1,
+	},
+	stickyHeaderSpacer: {
+		width: 40, // Same width as back button to center title
+	},
+	// Sticky Image Container - Scrolls until it reaches top, then sticks
+	stickyImageContainer: {
+		position: "absolute",
+		top: 0,
+		left: 0,
+		right: 0,
+		width: "100%",
+		overflow: "visible",
+		zIndex: 1,
+	},
+	stickyImage: {
+		width: "100%",
+		height: "100%",
+		resizeMode: "cover",
+	},
+	imageBackButton: {
+		position: "absolute",
+		top: 40,
+		left: 20,
+		zIndex: 2,
+		backgroundColor: "rgba(0,0,0,0.6)",
+		borderRadius: 20,
+		padding: 6,
+	},
+	imageActionButtons: {
+		position: "absolute",
+		right: 20,
+		bottom: -15,
+		zIndex: 2,
+		flexDirection: "row",
+		gap: 4,
+	},
+	// Legacy styles for backward compatibility
 	header: {
 		position: "relative",
 		width: "100%",
@@ -417,7 +567,7 @@ const styles = StyleSheet.create({
 	},
 	content: {
 		paddingHorizontal: 24,
-		marginTop: 56,
+		marginTop: 0,
 	},
 	titleRow: {
 		flexDirection: "row",
