@@ -2,9 +2,9 @@ import { ClerkProvider, SignedIn, SignedOut } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import { View, Text } from "react-native";
-import { ErrorBoundary } from "react-error-boundary";
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+import { Text, View } from "react-native";
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const BACKEND_BASE_URL = process.env.EXPO_PUBLIC_BACKEND_BASE_URL;

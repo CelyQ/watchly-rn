@@ -1,10 +1,10 @@
-const { getDefaultConfig } = require('expo/metro-config');
+const { getDefaultConfig } = require("expo/metro-config");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
 const ALIASES = {
-	'@': __dirname
+	"@": __dirname,
 };
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
@@ -13,7 +13,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 		context,
 		// Use an alias if one exists.
 		ALIASES[moduleName] ?? moduleName,
-		platform
+		platform,
 	);
 };
 

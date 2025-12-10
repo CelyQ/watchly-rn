@@ -80,7 +80,7 @@ export type RapidAPIIMDBSearchResponseData = {
 };
 
 export type RapidAPIIMDBSearchResponseDataEntity =
-	RapidAPIIMDBSearchResponseData['data']['mainSearch']['edges'][0]['node']['entity'];
+	RapidAPIIMDBSearchResponseData["data"]["mainSearch"]["edges"][0]["node"]["entity"];
 
 export type RapidAPIIMDBTitleGetBaseResponseData = {
 	data: {

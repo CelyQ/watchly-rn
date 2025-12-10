@@ -2,8 +2,8 @@
 module.exports = {
 	useTabs: true,
 	singleQuote: true,
-	trailingComma: 'none',
+	trailingComma: "none",
 	printWidth: 100,
 	plugins: [],
-	overrides: []
+	overrides: [],
 };
