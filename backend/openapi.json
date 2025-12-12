@@ -1,1 +1,774 @@
-{"openapi":"3.0.3","info":{"title":"Watchly API","description":"API documentation for Watchly mobile app","version":"1.0.0"},"paths":{"/api/v1/likes/toggle":{"post":{"requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"mediaType":{"type":"string","enum":["movie","tv"]}},"required":["imdbId","mediaType"]}},"application/x-www-form-urlencoded":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"mediaType":{"type":"string","enum":["movie","tv"]}},"required":["imdbId","mediaType"]}},"multipart/form-data":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"mediaType":{"type":"string","enum":["movie","tv"]}},"required":["imdbId","mediaType"]}}}},"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"liked":{"type":"boolean"}},"required":["liked"]}}}}},"operationId":"postApiV1LikesToggle"}},"/api/v1/likes/check":{"get":{"parameters":[{"name":"imdbId","in":"query","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"liked":{"type":"boolean"}},"required":["liked"]}}}}},"operationId":"getApiV1LikesCheck"}},"/api/v1/likes/list":{"get":{"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"likes":{"type":"array","items":{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"mediaType":{"type":"string","enum":["movie","tv"]},"createdAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","mediaType","createdAt"]}}},"required":["likes"]}}}}},"operationId":"getApiV1LikesList"}},"/api/v1/progress/movie":{"get":{"parameters":[{"name":"imdbId","in":"query","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"progress":{"anyOf":[{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","isWatched","updatedAt"]},{"type":"null"}]}},"required":["progress"]}}}}},"operationId":"getApiV1ProgressMovie"},"post":{"requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"isWatched":{"type":"boolean"}},"required":["imdbId"]}},"application/x-www-form-urlencoded":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"isWatched":{"type":"boolean"}},"required":["imdbId"]}},"multipart/form-data":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"isWatched":{"type":"boolean"}},"required":["imdbId"]}}}},"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"progress":{"anyOf":[{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","isWatched","updatedAt"]},{"type":"null"}]}},"required":["progress"]}}}}},"operationId":"postApiV1ProgressMovie"}},"/api/v1/progress/movies":{"get":{"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"progress":{"type":"array","items":{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","isWatched","updatedAt"]}}},"required":["progress"]}}}}},"operationId":"getApiV1ProgressMovies"}},"/api/v1/progress/episode":{"get":{"parameters":[{"name":"imdbId","in":"query","required":true,"schema":{"type":"string"}},{"name":"seasonNumber","in":"query","required":true,"schema":{"type":"number"}},{"name":"episodeNumber","in":"query","required":true,"schema":{"type":"number"}}],"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"progress":{"anyOf":[{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","seasonNumber","episodeNumber","isWatched","updatedAt"]},{"type":"null"}]}},"required":["progress"]}}}}},"operationId":"getApiV1ProgressEpisode"},"post":{"requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"}},"required":["imdbId","seasonNumber","episodeNumber"]}},"application/x-www-form-urlencoded":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"}},"required":["imdbId","seasonNumber","episodeNumber"]}},"multipart/form-data":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"}},"required":["imdbId","seasonNumber","episodeNumber"]}}}},"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"progress":{"anyOf":[{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","seasonNumber","episodeNumber","isWatched","updatedAt"]},{"type":"null"}]}},"required":["progress"]}}}}},"operationId":"postApiV1ProgressEpisode"}},"/api/v1/progress/tv":{"get":{"parameters":[{"name":"imdbId","in":"query","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"episodes":{"type":"array","items":{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","seasonNumber","episodeNumber","isWatched","updatedAt"]}}},"required":["episodes"]}}}}},"operationId":"getApiV1ProgressTv"}},"/api/v1/progress/all":{"get":{"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"movies":{"type":"array","items":{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","isWatched","updatedAt"]}},"episodes":{"type":"array","items":{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","seasonNumber","episodeNumber","isWatched","updatedAt"]}}},"required":["movies","episodes"]}}}}},"operationId":"getApiV1ProgressAll"}},"/api/v1/progress/mark-all-tv":{"post":{"requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"episodes":{"type":"array","items":{"type":"object","properties":{"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"}},"required":["seasonNumber","episodeNumber"]}},"isWatched":{"type":"boolean"}},"required":["imdbId","episodes","isWatched"]}},"application/x-www-form-urlencoded":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"episodes":{"type":"array","items":{"type":"object","properties":{"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"}},"required":["seasonNumber","episodeNumber"]}},"isWatched":{"type":"boolean"}},"required":["imdbId","episodes","isWatched"]}},"multipart/form-data":{"schema":{"type":"object","properties":{"imdbId":{"type":"string"},"episodes":{"type":"array","items":{"type":"object","properties":{"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"}},"required":["seasonNumber","episodeNumber"]}},"isWatched":{"type":"boolean"}},"required":["imdbId","episodes","isWatched"]}}}},"responses":{"200":{"description":"Response for status 200","content":{"application/json":{"schema":{"type":"object","properties":{"progress":{"type":"array","items":{"type":"object","properties":{"id":{"type":"number"},"userId":{"type":"string"},"imdbId":{"type":"string"},"seasonNumber":{"type":"number"},"episodeNumber":{"type":"number"},"isWatched":{"type":"boolean"},"updatedAt":{"anyOf":[{"type":"Date"},{"format":"date-time","type":"string"},{"format":"date","type":"string"},{"type":"number"}]}},"required":["id","userId","imdbId","seasonNumber","episodeNumber","isWatched","updatedAt"]}}},"required":["progress"]}}}}},"operationId":"postApiV1ProgressMark-all-tv"}},"/api/v1/media/getMostPopular":{"get":{"operationId":"getApiV1MediaGetMostPopular"}},"/api/v1/media/getTitleDetails":{"get":{"operationId":"getApiV1MediaGetTitleDetails"}},"/api/v1/media/getTitleEpisodes":{"get":{"operationId":"getApiV1MediaGetTitleEpisodes"}},"/api/v1/media/getTitleSeasons":{"get":{"operationId":"getApiV1MediaGetTitleSeasons"}},"/api/v1/media/getTitlePlot":{"get":{"operationId":"getApiV1MediaGetTitlePlot"}},"/api/v1/media/getTopCastCrew":{"get":{"operationId":"getApiV1MediaGetTopCastCrew"}},"/api/v1/media/getFullCastCrew":{"get":{"operationId":"getApiV1MediaGetFullCastCrew"}},"/api/v1/media/getSeasonImages":{"get":{"operationId":"getApiV1MediaGetSeasonImages"}},"/api/v1/media/search":{"get":{"operationId":"getApiV1MediaSearch"}}},"components":{"schemas":{}}}
+{
+	"openapi": "3.0.3",
+	"info": {
+		"title": "Watchly API",
+		"description": "API documentation for Watchly mobile app",
+		"version": "1.0.0"
+	},
+	"paths": {
+		"/api/v1/likes/toggle": {
+			"post": {
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"mediaType": { "type": "string", "enum": ["movie", "tv"] }
+								},
+								"required": ["imdbId", "mediaType"]
+							}
+						},
+						"application/x-www-form-urlencoded": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"mediaType": { "type": "string", "enum": ["movie", "tv"] }
+								},
+								"required": ["imdbId", "mediaType"]
+							}
+						},
+						"multipart/form-data": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"mediaType": { "type": "string", "enum": ["movie", "tv"] }
+								},
+								"required": ["imdbId", "mediaType"]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": { "liked": { "type": "boolean" } },
+									"required": ["liked"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "postApiV1LikesToggle"
+			}
+		},
+		"/api/v1/likes/check": {
+			"get": {
+				"parameters": [
+					{
+						"name": "imdbId",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "string" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": { "liked": { "type": "boolean" } },
+									"required": ["liked"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "getApiV1LikesCheck"
+			}
+		},
+		"/api/v1/likes/list": {
+			"get": {
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"likes": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": { "type": "number" },
+													"userId": { "type": "string" },
+													"imdbId": { "type": "string" },
+													"mediaType": {
+														"type": "string",
+														"enum": ["movie", "tv"]
+													},
+													"createdAt": {
+														"anyOf": [
+															{ "type": "Date" },
+															{ "format": "date-time", "type": "string" },
+															{ "format": "date", "type": "string" },
+															{ "type": "number" }
+														]
+													}
+												},
+												"required": [
+													"id",
+													"userId",
+													"imdbId",
+													"mediaType",
+													"createdAt"
+												]
+											}
+										}
+									},
+									"required": ["likes"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "getApiV1LikesList"
+			}
+		},
+		"/api/v1/progress/movie": {
+			"get": {
+				"parameters": [
+					{
+						"name": "imdbId",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "string" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"progress": {
+											"anyOf": [
+												{
+													"type": "object",
+													"properties": {
+														"id": { "type": "number" },
+														"userId": { "type": "string" },
+														"imdbId": { "type": "string" },
+														"isWatched": { "type": "boolean" },
+														"updatedAt": {
+															"anyOf": [
+																{ "type": "Date" },
+																{ "format": "date-time", "type": "string" },
+																{ "format": "date", "type": "string" },
+																{ "type": "number" }
+															]
+														}
+													},
+													"required": [
+														"id",
+														"userId",
+														"imdbId",
+														"isWatched",
+														"updatedAt"
+													]
+												},
+												{ "type": "null" }
+											]
+										}
+									},
+									"required": ["progress"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "getApiV1ProgressMovie"
+			},
+			"post": {
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId"]
+							}
+						},
+						"application/x-www-form-urlencoded": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId"]
+							}
+						},
+						"multipart/form-data": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId"]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"progress": {
+											"anyOf": [
+												{
+													"type": "object",
+													"properties": {
+														"id": { "type": "number" },
+														"userId": { "type": "string" },
+														"imdbId": { "type": "string" },
+														"isWatched": { "type": "boolean" },
+														"updatedAt": {
+															"anyOf": [
+																{ "type": "Date" },
+																{ "format": "date-time", "type": "string" },
+																{ "format": "date", "type": "string" },
+																{ "type": "number" }
+															]
+														}
+													},
+													"required": [
+														"id",
+														"userId",
+														"imdbId",
+														"isWatched",
+														"updatedAt"
+													]
+												},
+												{ "type": "null" }
+											]
+										}
+									},
+									"required": ["progress"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "postApiV1ProgressMovie"
+			}
+		},
+		"/api/v1/progress/movies": {
+			"get": {
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"progress": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": { "type": "number" },
+													"userId": { "type": "string" },
+													"imdbId": { "type": "string" },
+													"isWatched": { "type": "boolean" },
+													"updatedAt": {
+														"anyOf": [
+															{ "type": "Date" },
+															{ "format": "date-time", "type": "string" },
+															{ "format": "date", "type": "string" },
+															{ "type": "number" }
+														]
+													}
+												},
+												"required": [
+													"id",
+													"userId",
+													"imdbId",
+													"isWatched",
+													"updatedAt"
+												]
+											}
+										}
+									},
+									"required": ["progress"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "getApiV1ProgressMovies"
+			}
+		},
+		"/api/v1/progress/episode": {
+			"get": {
+				"parameters": [
+					{
+						"name": "imdbId",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "string" }
+					},
+					{
+						"name": "seasonNumber",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "number" }
+					},
+					{
+						"name": "episodeNumber",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "number" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"progress": {
+											"anyOf": [
+												{
+													"type": "object",
+													"properties": {
+														"id": { "type": "number" },
+														"userId": { "type": "string" },
+														"imdbId": { "type": "string" },
+														"seasonNumber": { "type": "number" },
+														"episodeNumber": { "type": "number" },
+														"isWatched": { "type": "boolean" },
+														"updatedAt": {
+															"anyOf": [
+																{ "type": "Date" },
+																{ "format": "date-time", "type": "string" },
+																{ "format": "date", "type": "string" },
+																{ "type": "number" }
+															]
+														}
+													},
+													"required": [
+														"id",
+														"userId",
+														"imdbId",
+														"seasonNumber",
+														"episodeNumber",
+														"isWatched",
+														"updatedAt"
+													]
+												},
+												{ "type": "null" }
+											]
+										}
+									},
+									"required": ["progress"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "getApiV1ProgressEpisode"
+			},
+			"post": {
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"seasonNumber": { "type": "number" },
+									"episodeNumber": { "type": "number" },
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId", "seasonNumber", "episodeNumber"]
+							}
+						},
+						"application/x-www-form-urlencoded": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"seasonNumber": { "type": "number" },
+									"episodeNumber": { "type": "number" },
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId", "seasonNumber", "episodeNumber"]
+							}
+						},
+						"multipart/form-data": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"seasonNumber": { "type": "number" },
+									"episodeNumber": { "type": "number" },
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId", "seasonNumber", "episodeNumber"]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"progress": {
+											"anyOf": [
+												{
+													"type": "object",
+													"properties": {
+														"id": { "type": "number" },
+														"userId": { "type": "string" },
+														"imdbId": { "type": "string" },
+														"seasonNumber": { "type": "number" },
+														"episodeNumber": { "type": "number" },
+														"isWatched": { "type": "boolean" },
+														"updatedAt": {
+															"anyOf": [
+																{ "type": "Date" },
+																{ "format": "date-time", "type": "string" },
+																{ "format": "date", "type": "string" },
+																{ "type": "number" }
+															]
+														}
+													},
+													"required": [
+														"id",
+														"userId",
+														"imdbId",
+														"seasonNumber",
+														"episodeNumber",
+														"isWatched",
+														"updatedAt"
+													]
+												},
+												{ "type": "null" }
+											]
+										}
+									},
+									"required": ["progress"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "postApiV1ProgressEpisode"
+			}
+		},
+		"/api/v1/progress/tv": {
+			"get": {
+				"parameters": [
+					{
+						"name": "imdbId",
+						"in": "query",
+						"required": true,
+						"schema": { "type": "string" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"episodes": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": { "type": "number" },
+													"userId": { "type": "string" },
+													"imdbId": { "type": "string" },
+													"seasonNumber": { "type": "number" },
+													"episodeNumber": { "type": "number" },
+													"isWatched": { "type": "boolean" },
+													"updatedAt": {
+														"anyOf": [
+															{ "type": "Date" },
+															{ "format": "date-time", "type": "string" },
+															{ "format": "date", "type": "string" },
+															{ "type": "number" }
+														]
+													}
+												},
+												"required": [
+													"id",
+													"userId",
+													"imdbId",
+													"seasonNumber",
+													"episodeNumber",
+													"isWatched",
+													"updatedAt"
+												]
+											}
+										}
+									},
+									"required": ["episodes"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "getApiV1ProgressTv"
+			}
+		},
+		"/api/v1/progress/all": {
+			"get": {
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"movies": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": { "type": "number" },
+													"userId": { "type": "string" },
+													"imdbId": { "type": "string" },
+													"isWatched": { "type": "boolean" },
+													"updatedAt": {
+														"anyOf": [
+															{ "type": "Date" },
+															{ "format": "date-time", "type": "string" },
+															{ "format": "date", "type": "string" },
+															{ "type": "number" }
+														]
+													}
+												},
+												"required": [
+													"id",
+													"userId",
+													"imdbId",
+													"isWatched",
+													"updatedAt"
+												]
+											}
+										},
+										"episodes": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": { "type": "number" },
+													"userId": { "type": "string" },
+													"imdbId": { "type": "string" },
+													"seasonNumber": { "type": "number" },
+													"episodeNumber": { "type": "number" },
+													"isWatched": { "type": "boolean" },
+													"updatedAt": {
+														"anyOf": [
+															{ "type": "Date" },
+															{ "format": "date-time", "type": "string" },
+															{ "format": "date", "type": "string" },
+															{ "type": "number" }
+														]
+													}
+												},
+												"required": [
+													"id",
+													"userId",
+													"imdbId",
+													"seasonNumber",
+													"episodeNumber",
+													"isWatched",
+													"updatedAt"
+												]
+											}
+										}
+									},
+									"required": ["movies", "episodes"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "getApiV1ProgressAll"
+			}
+		},
+		"/api/v1/progress/mark-all-tv": {
+			"post": {
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"episodes": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"seasonNumber": { "type": "number" },
+												"episodeNumber": { "type": "number" }
+											},
+											"required": ["seasonNumber", "episodeNumber"]
+										}
+									},
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId", "episodes", "isWatched"]
+							}
+						},
+						"application/x-www-form-urlencoded": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"episodes": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"seasonNumber": { "type": "number" },
+												"episodeNumber": { "type": "number" }
+											},
+											"required": ["seasonNumber", "episodeNumber"]
+										}
+									},
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId", "episodes", "isWatched"]
+							}
+						},
+						"multipart/form-data": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"imdbId": { "type": "string" },
+									"episodes": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"seasonNumber": { "type": "number" },
+												"episodeNumber": { "type": "number" }
+											},
+											"required": ["seasonNumber", "episodeNumber"]
+										}
+									},
+									"isWatched": { "type": "boolean" }
+								},
+								"required": ["imdbId", "episodes", "isWatched"]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response for status 200",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"progress": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": { "type": "number" },
+													"userId": { "type": "string" },
+													"imdbId": { "type": "string" },
+													"seasonNumber": { "type": "number" },
+													"episodeNumber": { "type": "number" },
+													"isWatched": { "type": "boolean" },
+													"updatedAt": {
+														"anyOf": [
+															{ "type": "Date" },
+															{ "format": "date-time", "type": "string" },
+															{ "format": "date", "type": "string" },
+															{ "type": "number" }
+														]
+													}
+												},
+												"required": [
+													"id",
+													"userId",
+													"imdbId",
+													"seasonNumber",
+													"episodeNumber",
+													"isWatched",
+													"updatedAt"
+												]
+											}
+										}
+									},
+									"required": ["progress"]
+								}
+							}
+						}
+					}
+				},
+				"operationId": "postApiV1ProgressMark-all-tv"
+			}
+		},
+		"/api/v1/media/getMostPopular": {
+			"get": { "operationId": "getApiV1MediaGetMostPopular" }
+		},
+		"/api/v1/media/getTitleDetails": {
+			"get": { "operationId": "getApiV1MediaGetTitleDetails" }
+		},
+		"/api/v1/media/getTitleEpisodes": {
+			"get": { "operationId": "getApiV1MediaGetTitleEpisodes" }
+		},
+		"/api/v1/media/getTitleSeasons": {
+			"get": { "operationId": "getApiV1MediaGetTitleSeasons" }
+		},
+		"/api/v1/media/getTitlePlot": {
+			"get": { "operationId": "getApiV1MediaGetTitlePlot" }
+		},
+		"/api/v1/media/getTopCastCrew": {
+			"get": { "operationId": "getApiV1MediaGetTopCastCrew" }
+		},
+		"/api/v1/media/getFullCastCrew": {
+			"get": { "operationId": "getApiV1MediaGetFullCastCrew" }
+		},
+		"/api/v1/media/getSeasonImages": {
+			"get": { "operationId": "getApiV1MediaGetSeasonImages" }
+		},
+		"/api/v1/media/search": { "get": { "operationId": "getApiV1MediaSearch" } }
+	},
+	"components": { "schemas": {} }
+}
