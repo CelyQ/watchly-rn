@@ -6,6 +6,7 @@
 		"paths": {
 			"@/*": ["./*"]
 		},
-		"jsx": "react-native"
+		"jsx": "react-native",
+		"noUncheckedIndexedAccess": true
 	}
 }
