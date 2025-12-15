@@ -1,17 +1,10 @@
-import { useUser } from "@clerk/clerk-expo";
 import { View, Text, StyleSheet, SafeAreaView } from "react-native";
-import { SignOutButton } from "@/components/sign-out-button";
 
-export default function User() {
-	const { user } = useUser();
-
+export default function Progress() {
 	return (
 		<SafeAreaView style={styles.container}>
 			<View style={styles.content}>
-				<Text style={styles.text}>
-					Hello {user?.emailAddresses[0].emailAddress}
-				</Text>
-				<SignOutButton />
+				<Text style={styles.text}>Progress</Text>
 			</View>
 		</SafeAreaView>
 	);
@@ -30,5 +23,7 @@ const styles = StyleSheet.create({
 	},
 	text: {
 		color: "#fff",
+		fontSize: 18,
 	},
 });
+

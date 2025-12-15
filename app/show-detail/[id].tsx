@@ -1,98 +1,86 @@
-import {
-	View,
-	Text,
-	Image,
-	StyleSheet,
-	ScrollView,
-	TouchableOpacity,
-	Animated,
-} from "react-native";
-import type { NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { RapidAPIIMDBOverviewResponseData } from "@/types/rapidapi.type";
-import { ArrowLeft, Bookmark } from "react-native-feather";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@clerk/clerk-expo";
-import React from "react";
+import type { FC } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import {
+	Animated,
+	Image,
+	ScrollView,
+	StyleSheet,
+	Text,
+	TouchableOpacity,
+	View,
+} from "react-native";
+import { ArrowLeft, Heart } from "react-native-feather";
+import { queryClient } from "@/app/_layout";
+import { SeasonCard } from "@/components/season-card";
+import { ShowDetailSkeleton } from "@/components/show-detail-skeleton";
+import { $api, fetchClient } from "@/lib/api";
 
-const ShowDetailSkeleton: React.FC<{
-	router: ReturnType<typeof useRouter>;
-}> = ({ router }) => {
-	return (
-		<ScrollView
-			style={styles.container}
-			contentContainerStyle={{ paddingBottom: 40 }}
-		>
-			<View style={styles.header}>
-				<TouchableOpacity
-					style={styles.backButton}
-					onPress={() => router.back()}
-				>
-					<ArrowLeft stroke="#fff" width={28} height={28} />
-				</TouchableOpacity>
-				<View style={[styles.poster, { backgroundColor: "#222" }]} />
-			</View>
-			<View style={styles.content}>
-				<View
-					style={[
-						styles.skeletonTitle,
-						{ backgroundColor: "#222", width: "70%" },
-					]}
-				/>
-				<View style={styles.genresRow}>
-					{[1, 2, 3].map((i) => (
-						<View
-							key={i}
-							style={[styles.genreTag, { backgroundColor: "#222" }]}
-						>
-							<View
-								style={{ width: 60, height: 14, backgroundColor: "#333" }}
-							/>
-						</View>
-					))}
-				</View>
-				<View
-					style={[
-						styles.skeletonText,
-						{ backgroundColor: "#222", width: "40%" },
-					]}
-				/>
-				<View
-					style={[
-						styles.skeletonText,
-						{ backgroundColor: "#222", width: "100%", height: 100 },
-					]}
-				/>
-				<View style={styles.section}>
-					<View
-						style={[
-							styles.skeletonText,
-							{ backgroundColor: "#222", width: "30%" },
-						]}
-					/>
-					<View style={styles.seasonsRow}>
-						{[1, 2].map((i) => (
-							<View
-								key={i}
-								style={[styles.seasonCard, { backgroundColor: "#222" }]}
-							>
-								<View
-									style={{ width: 80, height: 20, backgroundColor: "#333" }}
-								/>
-							</View>
-						))}
-					</View>
-				</View>
-			</View>
-		</ScrollView>
+async function fetchAllEpisodesForShow(imdbId: string) {
+	const seasonsResult = await fetchClient.GET("/api/v1/media/getTitleSeasons", {
+		params: {
+			query: {
+				tt: imdbId,
+			},
+		},
+	});
+
+	const seasonsJson = seasonsResult.data;
+
+	if (!seasonsJson) {
+		return [];
+	}
+
+	const seasonEdges =
+		seasonsJson.title?.episodes?.displayableSeasons?.edges ?? [];
+	const seasonNumbers = seasonEdges
+		.map((edge) => edge?.node?.season)
+		.filter((s): s is string => Boolean(s))
+		.map((s) => Number.parseInt(s, 10))
+		.filter((n) => !Number.isNaN(n));
+
+	const episodeResults = await Promise.all(
+		seasonNumbers.map((seasonNumber) =>
+			fetchClient.GET("/api/v1/media/getTitleEpisodes", {
+				params: {
+					query: {
+						tt: imdbId,
+						seasonNumber,
+					},
+				},
+			}),
+		),
 	);
-};
 
-const ShowDetail: React.FC = () => {
+	const episodes: { seasonNumber: number; episodeNumber: number }[] = [];
+
+	for (let index = 0; index < episodeResults.length; index++) {
+		const result = episodeResults[index];
+		if (!result || !result.data) continue;
+
+		const seasonNumber = seasonNumbers[index];
+		if (seasonNumber === undefined) continue;
+
+		const episodeEdges = result.data.title?.episodes?.episodes?.edges ?? [];
+
+		for (const edge of episodeEdges) {
+			if (!edge) continue;
+			episodes.push({
+				seasonNumber,
+				episodeNumber: edge.position,
+			});
+		}
+	}
+
+	return episodes;
+}
+
+const ShowDetail: FC = () => {
 	const router = useRouter();
 	const { id } = useLocalSearchParams();
-	const { getToken } = useAuth();
-	const queryClient = useQueryClient();
+	const imdbId = String(id);
 	const pulseAnim = new Animated.Value(1);
 
 	// Animation values for sticky header
@@ -100,167 +88,128 @@ const ShowDetail: React.FC = () => {
 	const headerHeight = 340;
 	const maxHeaderHeight = 500;
 
-	const { data: status } = useQuery({
-		queryKey: ["show-status", id],
-		queryFn: async () => {
-			const token = await getToken();
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/status/${id}`,
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
+	const { data: likedData, refetch: refetchLiked } = $api.useQuery(
+		"get",
+		"/api/v1/likes/check",
+		{
+			params: {
+				query: {
+					imdbId,
 				},
-			);
-
-			if (response.status === 200) {
-				const { status } = (await response.json()) as {
-					status: "WATCHED" | "PLAN_TO_WATCH" | null;
-				};
-				return status;
-			}
-
-			return null;
+			},
 		},
-	});
+	);
 
-	const { mutateAsync: save, isPending: isSaving } = useMutation({
-		mutationFn: async () => {
-			const token = await getToken();
-			const type = isSeries ? "tv" : "movie";
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
-				{
-					method: "POST",
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						imdbId: id,
-						status: "PLAN_TO_WATCH",
-					}),
-				},
-			);
+	const isLiked = likedData?.liked ?? false;
+	const [watched, setWatched] = useState(false);
+	const [isRemovingFromWatched, setIsRemovingFromWatched] = useState(false);
 
-			if (!response.ok) {
-				throw new Error("Failed to save");
-			}
+	const { mutateAsync: toggleLike, isPending: isTogglingLike } =
+		$api.useMutation("post", "/api/v1/likes/toggle");
 
-			return response.json();
-		},
+	const { data: allProgressData, isLoading: isProgressLoading } = $api.useQuery(
+		"get",
+		"/api/v1/progress/all",
+	);
+
+	const {
+		mutateAsync: markMovieAsWatched,
+		isPending: isMarkingMovieAsWatched,
+	} = $api.useMutation("put", "/api/v1/progress/movie", {
 		onSuccess: () => {
-			queryClient.setQueryData(["show-status", id], "PLAN_TO_WATCH");
+			setWatched(true);
 			queryClient.invalidateQueries({
-				queryKey: isSeries ? ["my-shows"] : ["my-movies"],
+				queryKey: ["get", "/api/v1/progress/all"],
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["my-movies"],
 			});
 		},
 	});
 
-	const { mutateAsync: unsave, isPending: isUnsaving } = useMutation({
-		mutationFn: async () => {
-			const token = await getToken();
-			const type = isSeries ? "tv" : "movie";
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
-				{
-					method: "POST",
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						imdbId: id,
-						status: null,
-					}),
-				},
-			);
-
-			if (!response.ok) {
-				throw new Error("Failed to unsave");
-			}
-
-			return response.json();
-		},
+	const {
+		mutateAsync: markAllEpisodesAsWatched,
+		isPending: isMarkingAllEpisodesAsWatched,
+	} = $api.useMutation("post", "/api/v1/progress/mark-all-tv", {
 		onSuccess: () => {
-			queryClient.setQueryData(["show-status", id], null);
+			setWatched(true);
 			queryClient.invalidateQueries({
-				queryKey: isSeries ? ["my-shows"] : ["my-movies"],
+				queryKey: ["get", "/api/v1/progress/all"],
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["my-shows"],
 			});
 		},
 	});
 
-	const { mutateAsync: markAsWatched, isPending: isMarkingAsWatched } =
-		useMutation({
-			mutationFn: async () => {
-				const token = await getToken();
-				const type = isSeries ? "tv" : "movie";
-				const response = await fetch(
-					`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
-					{
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${token}`,
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({
-							imdbId: id,
-							status: "WATCHED",
-						}),
-					},
-				);
-
-				if (!response.ok) {
-					throw new Error("Failed to mark as watched");
-				}
-
-				return response.json();
-			},
+	const { mutateAsync: unmarkAllEpisodesAsWatched } = $api.useMutation(
+		"post",
+		"/api/v1/progress/mark-all-tv",
+		{
 			onSuccess: () => {
-				queryClient.setQueryData(["show-status", id], "WATCHED");
+				setWatched(false);
 				queryClient.invalidateQueries({
-					queryKey: isSeries ? ["my-shows"] : ["my-movies"],
+					queryKey: ["get", "/api/v1/progress/all"],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["my-shows"],
 				});
 			},
-		});
+		},
+	);
 
-	const { mutateAsync: removeFromWatched, isPending: isRemovingFromWatched } =
-		useMutation({
-			mutationFn: async () => {
-				const token = await getToken();
-				const type = isSeries ? "tv" : "movie";
-				const response = await fetch(
-					`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/${type}/save`,
-					{
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${token}`,
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({
-							imdbId: id,
-							status: "PLAN_TO_WATCH",
-						}),
+	const handleMarkAsWatched = async () => {
+		if (isSeries) {
+			const episodes = await fetchAllEpisodesForShow(String(id));
+
+			if (episodes.length === 0) return;
+
+			await markAllEpisodesAsWatched({
+				body: {
+					imdbId: String(id),
+					episodes,
+					isWatched: true,
+				},
+			});
+		} else {
+			await markMovieAsWatched({
+				body: {
+					imdbId: String(id),
+					isWatched: true,
+				},
+			});
+		}
+	};
+
+	const handleRemoveFromWatched = async () => {
+		setIsRemovingFromWatched(true);
+		try {
+			if (isSeries) {
+				const episodes = await fetchAllEpisodesForShow(String(id));
+				if (episodes.length === 0) return;
+
+				await unmarkAllEpisodesAsWatched({
+					body: {
+						imdbId: String(id),
+						episodes,
+						isWatched: false,
 					},
-				);
-
-				if (!response.ok) {
-					throw new Error("Failed to remove from watched");
-				}
-
-				return response.json();
-			},
-			onSuccess: () => {
-				queryClient.setQueryData(["show-status", id], "PLAN_TO_WATCH");
-				queryClient.invalidateQueries({
-					queryKey: isSeries ? ["my-shows"] : ["my-movies"],
 				});
-			},
-		});
+			} else {
+				await markMovieAsWatched({
+					body: {
+						imdbId: String(id),
+						isWatched: false,
+					},
+				});
+			}
+		} finally {
+			setIsRemovingFromWatched(false);
+		}
+	};
 
-	React.useEffect(() => {
-		if (isSaving || isUnsaving) {
+	useEffect(() => {
+		if (isTogglingLike) {
 			Animated.loop(
 				Animated.sequence([
 					Animated.timing(pulseAnim, {
@@ -278,34 +227,157 @@ const ShowDetail: React.FC = () => {
 		} else {
 			pulseAnim.setValue(1);
 		}
-	}, [isSaving, isUnsaving, pulseAnim]);
+	}, [isTogglingLike, pulseAnim]);
 
-	const { data, isLoading } = useQuery({
-		queryKey: ["show-detail", id],
+	const { data: details, isLoading } = $api.useQuery(
+		"get",
+		"/api/v1/media/getTitleDetails",
+		{
+			params: {
+				query: {
+					tt: imdbId,
+				},
+			},
+		},
+	);
+
+	const { data: plotData } = $api.useQuery(
+		"get",
+		"/api/v1/media/getTitlePlot",
+		{
+			params: {
+				query: {
+					tt: imdbId,
+				},
+			},
+		},
+	);
+
+	const { data: castData } = $api.useQuery(
+		"get",
+		"/api/v1/media/getTopCastCrew",
+		{
+			params: {
+				query: {
+					tt: imdbId,
+				},
+			},
+		},
+	);
+
+	const data = details?.title;
+	const isSeries = data?.titleType?.isSeries === true;
+
+	const shouldFetchSeasons =
+		!isLoading && details !== undefined && data?.titleType?.isSeries === true;
+
+	const { data: seasonsData } = useQuery({
+		queryKey: ["get", "/api/v1/media/getTitleSeasons", { tt: imdbId }],
 		queryFn: async () => {
-			const token = await getToken();
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/search/imdb/${id}`,
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
+			const result = await fetchClient.GET("/api/v1/media/getTitleSeasons", {
+				params: {
+					query: {
+						tt: imdbId,
 					},
 				},
-			);
-
-			if (response.status === 429) {
-				throw new Error("Rate limit exceeded");
-			}
-
-			const data = (await response.json()) as {
-				overview: RapidAPIIMDBOverviewResponseData["data"]["title"];
-			};
-
-			return data.overview;
+			});
+			return result.data;
 		},
+		enabled: shouldFetchSeasons,
 	});
 
-	const isSeries = data?.titleType?.isSeries;
+	const plot = plotData?.title?.plot;
+	const castTitle = castData?.title;
+	const seasonsTitle = seasonsData?.title;
+
+	// Get progress for this specific show/movie
+	const showEpisodes = useMemo(() => {
+		if (!allProgressData?.episodes) return [];
+		return allProgressData.episodes.filter((ep) => ep.imdbId === imdbId);
+	}, [allProgressData?.episodes, imdbId]);
+
+	const showMovieProgress = useMemo(() => {
+		if (!allProgressData?.movies) return null;
+		return allProgressData.movies.find((m) => m.imdbId === imdbId);
+	}, [allProgressData?.movies, imdbId]);
+
+	// Calculate season progress and watched status
+	const seasonProgress = useMemo(() => {
+		if (!isSeries || !seasonsTitle?.episodes?.displayableSeasons?.edges) {
+			return new Map<number, { progress: number; isWatched: boolean }>();
+		}
+
+		const seasonEdges = seasonsTitle.episodes.displayableSeasons.edges;
+		const progressMap = new Map<
+			number,
+			{ progress: number; isWatched: boolean }
+		>();
+
+		// Fetch episode counts for each season to calculate accurate progress
+		// For now, we'll calculate based on episodes we know about
+		for (const seasonEdge of seasonEdges) {
+			const seasonNum = Number.parseInt(seasonEdge.node.season, 10);
+			if (Number.isNaN(seasonNum)) continue;
+
+			const seasonEpisodes = showEpisodes.filter(
+				(ep) => ep.seasonNumber === seasonNum,
+			);
+			const watchedEpisodes = seasonEpisodes.filter((ep) => ep.isWatched);
+
+			// Calculate progress: if we have episodes, use them; otherwise 0
+			// Note: This is based on episodes we know about, not total episodes
+			// For accurate progress, we'd need to fetch episode counts per season
+			const progress =
+				seasonEpisodes.length > 0
+					? watchedEpisodes.length / seasonEpisodes.length
+					: 0;
+			const isWatched =
+				seasonEpisodes.length > 0 &&
+				watchedEpisodes.length === seasonEpisodes.length;
+
+			progressMap.set(seasonNum, { progress, isWatched });
+		}
+
+		return progressMap;
+	}, [isSeries, seasonsTitle, showEpisodes]);
+
+	const watchedSeasons = useMemo(() => {
+		const watchedSet = new Set<number>();
+		seasonProgress.forEach((value, seasonNum) => {
+			if (value.isWatched) {
+				watchedSet.add(seasonNum);
+			}
+		});
+		return watchedSet;
+	}, [seasonProgress]);
+
+	// Check if all episodes are watched (fast check)
+	const allEpisodesWatched = useMemo(() => {
+		if (!isSeries) {
+			return Boolean(showMovieProgress?.isWatched);
+		}
+
+		if (showEpisodes.length === 0) return false;
+		return showEpisodes.every((ep) => ep.isWatched);
+	}, [isSeries, showEpisodes, showMovieProgress]);
+
+	useEffect(() => {
+		setWatched(allEpisodesWatched);
+	}, [allEpisodesWatched]);
+
+	const isMarkingAsWatched = isSeries
+		? isMarkingAllEpisodesAsWatched
+		: isMarkingMovieAsWatched;
+
+	const handleToggleLike = async () => {
+		await toggleLike({
+			body: {
+				imdbId: String(id),
+				mediaType: isSeries ? "tv" : "movie",
+			},
+		});
+		refetchLiked();
+	};
 
 	if (isLoading) return <ShowDetailSkeleton router={router} />;
 
@@ -374,11 +446,22 @@ const ShowDetail: React.FC = () => {
 					},
 				]}
 			>
-				<Image
-					source={{ uri: data?.primaryImage?.url }}
-					style={styles.stickyImage}
-					resizeMode="cover"
-				/>
+				{data?.primaryImage?.url ? (
+					<Image
+						source={{ uri: data.primaryImage.url }}
+						style={styles.stickyImage}
+						resizeMode="cover"
+						onError={(e) => {
+							console.log("Image load error:", e.nativeEvent.error);
+						}}
+					/>
+				) : (
+					<View style={[styles.stickyImage, styles.placeholderImage]}>
+						<Text style={styles.placeholderText}>
+							{data?.titleText?.text?.[0] ?? "?"}
+						</Text>
+					</View>
+				)}
 
 				{/* Back Button Overlay */}
 				<TouchableOpacity
@@ -390,30 +473,26 @@ const ShowDetail: React.FC = () => {
 
 				{/* Action Buttons Overlay */}
 				<View style={styles.imageActionButtons}>
-					{status === "PLAN_TO_WATCH" && (
-						<Animated.View style={{ opacity: pulseAnim }}>
-							<TouchableOpacity
-								style={[styles.actionButton, styles.savedButton]}
-								onPress={() => unsave()}
-								disabled={isUnsaving}
-							>
-								<Bookmark stroke="#fff" width={20} height={20} />
-								<Text style={styles.actionButtonText}>Remove</Text>
-							</TouchableOpacity>
-						</Animated.View>
-					)}
-					{status !== "PLAN_TO_WATCH" && status !== "WATCHED" && (
-						<Animated.View style={{ opacity: pulseAnim }}>
-							<TouchableOpacity
-								style={[styles.actionButton, styles.saveButton]}
-								onPress={() => save()}
-								disabled={isSaving}
-							>
-								<Bookmark stroke="#fff" width={20} height={20} />
-								<Text style={styles.actionButtonText}>Save</Text>
-							</TouchableOpacity>
-						</Animated.View>
-					)}
+					<Animated.View style={{ opacity: pulseAnim }}>
+						<TouchableOpacity
+							style={[
+								styles.actionButton,
+								isLiked ? styles.likedButton : styles.likeButton,
+							]}
+							onPress={handleToggleLike}
+							disabled={isTogglingLike}
+						>
+							<Heart
+								stroke="#fff"
+								width={20}
+								height={20}
+								fill={isLiked ? "#fff" : "none"}
+							/>
+							<Text style={styles.actionButtonText}>
+								{isLiked ? "Liked" : "Like"}
+							</Text>
+						</TouchableOpacity>
+					</Animated.View>
 				</View>
 			</Animated.View>
 
@@ -434,40 +513,129 @@ const ShowDetail: React.FC = () => {
 				<View style={styles.content}>
 					<Text style={styles.title}>{data?.titleText?.text}</Text>
 					<View style={styles.genresRow}>
-						{data?.titleType?.categories.map((cat) => (
+						{data?.titleType?.categories?.map((cat) => (
 							<View key={cat.id} style={styles.genreTag}>
 								<Text style={styles.genreText}>{cat.text}</Text>
 							</View>
 						))}
 					</View>
-					<Text style={styles.rating}>
-						⭐ {data?.ratingsSummary?.aggregateRating} (
-						{data?.ratingsSummary?.voteCount} votes)
-					</Text>
-					<Text style={styles.description}>
-						{data?.plot?.plotText?.plainText}
-					</Text>
-					{status === "WATCHED" ? (
-						<TouchableOpacity
-							style={[styles.markWatchedButton, styles.removeWatchedButton]}
-							onPress={() => removeFromWatched()}
-							disabled={isRemovingFromWatched}
-						>
-							<Text style={styles.markWatchedButtonText}>
-								{isRemovingFromWatched ? "Removing..." : "Remove from Watched"}
-							</Text>
-						</TouchableOpacity>
-					) : (
-						<TouchableOpacity
-							style={styles.markWatchedButton}
-							onPress={() => markAsWatched()}
-							disabled={isMarkingAsWatched}
-						>
-							<Text style={styles.markWatchedButtonText}>
-								{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
-							</Text>
-						</TouchableOpacity>
+					{data?.releaseYear && (
+						<Text style={styles.rating}>
+							{data.releaseYear.year}
+							{data.releaseYear.endYear ? ` - ${data.releaseYear.endYear}` : ""}
+						</Text>
 					)}
+					{plot?.plotText?.plainText && (
+						<Text style={styles.description}>{plot.plotText.plainText}</Text>
+					)}
+					{!isLoading &&
+						!isProgressLoading &&
+						(watched ? (
+							<TouchableOpacity
+								style={[styles.markWatchedButton, styles.removeWatchedButton]}
+								onPress={handleRemoveFromWatched}
+								disabled={isRemovingFromWatched}
+							>
+								<Text style={styles.markWatchedButtonText}>
+									{isRemovingFromWatched
+										? "Removing..."
+										: "Remove from Watched"}
+								</Text>
+							</TouchableOpacity>
+						) : (
+							<TouchableOpacity
+								style={styles.markWatchedButton}
+								onPress={handleMarkAsWatched}
+								disabled={isMarkingAsWatched}
+							>
+								<Text style={styles.markWatchedButtonText}>
+									{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
+								</Text>
+							</TouchableOpacity>
+						))}
+
+					{/* Seasons Section */}
+					{isSeries &&
+						seasonsTitle?.episodes?.displayableSeasons?.edges &&
+						seasonsTitle.episodes.displayableSeasons.edges.length > 0 && (
+							<View style={styles.section}>
+								<Text style={styles.sectionTitle}>Seasons</Text>
+								<ScrollView
+									horizontal
+									showsHorizontalScrollIndicator={false}
+									style={styles.seasonsScroll}
+								>
+									{seasonsTitle.episodes.displayableSeasons.edges.map(
+										(seasonEdge) => {
+											const seasonNum = Number.parseInt(
+												seasonEdge.node.season,
+												10,
+											);
+											const seasonProgressData = seasonProgress.get(seasonNum);
+											const isSeasonWatched = watchedSeasons.has(seasonNum);
+											return (
+												<SeasonCard
+													key={seasonEdge.node.id}
+													showId={String(id)}
+													seasonNumber={seasonEdge.node.season}
+													seasonText={seasonEdge.node.text}
+													isWatched={isSeasonWatched}
+													progress={seasonProgressData?.progress ?? 0}
+												/>
+											);
+										},
+									)}
+								</ScrollView>
+							</View>
+						)}
+
+					{/* Cast Section */}
+					{castTitle?.principalCredits &&
+						castTitle.principalCredits.length > 0 && (
+							<View style={styles.section}>
+								<Text style={styles.sectionTitle}>Cast</Text>
+								<ScrollView
+									horizontal
+									showsHorizontalScrollIndicator={false}
+									style={styles.castScroll}
+								>
+									{castTitle.principalCredits
+										.flatMap((creditGroup) => creditGroup.credits)
+										.filter(
+											(
+												credit,
+											): credit is Extract<
+												typeof credit,
+												{ __typename: "Cast" }
+											> => credit.__typename === "Cast",
+										)
+										.slice(0, 10)
+										.map((cast, i) => (
+											<View
+												key={`${cast.name.id}-${i}`}
+												style={styles.castItem}
+											>
+												<Image
+													source={{
+														uri:
+															cast.name.primaryImage?.url ??
+															"https://via.placeholder.com/100x100/333/fff?text=?",
+													}}
+													style={styles.castImage}
+												/>
+												<Text style={styles.castName} numberOfLines={1}>
+													{cast.name.nameText.text}
+												</Text>
+												{cast.characters.length > 0 && cast.characters[0] && (
+													<Text style={styles.castCharacter} numberOfLines={1}>
+														{cast.characters[0].name}
+													</Text>
+												)}
+											</View>
+										))}
+								</ScrollView>
+							</View>
+						)}
 				</View>
 			</ScrollView>
 		</View>
@@ -605,10 +773,10 @@ const styles = StyleSheet.create({
 		shadowRadius: 3.84,
 		elevation: 5,
 	},
-	saveButton: {
+	likeButton: {
 		backgroundColor: "#3c3c3c",
 	},
-	savedButton: {
+	likedButton: {
 		backgroundColor: "#b14aed",
 	},
 	disabledButton: {
@@ -660,32 +828,6 @@ const styles = StyleSheet.create({
 		fontWeight: "bold",
 		marginBottom: 10,
 	},
-	seasonsRow: {
-		flexDirection: "row",
-		gap: 12,
-	},
-	seasonCard: {
-		backgroundColor: "#222",
-		borderRadius: 10,
-		paddingHorizontal: 18,
-		paddingVertical: 10,
-		marginRight: 12,
-	},
-	seasonText: {
-		color: "#fff",
-		fontSize: 16,
-		fontWeight: "600",
-	},
-	skeletonTitle: {
-		height: 40,
-		borderRadius: 8,
-		marginBottom: 10,
-	},
-	skeletonText: {
-		height: 20,
-		borderRadius: 4,
-		marginBottom: 16,
-	},
 	markWatchedButton: {
 		backgroundColor: "#3c3c3c",
 		flexDirection: "row",
@@ -703,6 +845,46 @@ const styles = StyleSheet.create({
 	},
 	removeWatchedButton: {
 		backgroundColor: "#ff4444",
+	},
+	placeholderImage: {
+		backgroundColor: "#222",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	placeholderText: {
+		color: "#666",
+		fontSize: 48,
+		fontWeight: "bold",
+	},
+	castScroll: {
+		marginLeft: -10,
+	},
+	castItem: {
+		width: 100,
+		marginRight: 15,
+		alignItems: "center",
+	},
+	castImage: {
+		width: 100,
+		height: 100,
+		borderRadius: 50,
+		backgroundColor: "#222",
+		marginBottom: 8,
+	},
+	castName: {
+		color: "#fff",
+		fontSize: 14,
+		fontWeight: "600",
+		textAlign: "center",
+		marginBottom: 4,
+	},
+	castCharacter: {
+		color: "#999",
+		fontSize: 12,
+		textAlign: "center",
+	},
+	seasonsScroll: {
+		marginLeft: -10,
 	},
 });
 

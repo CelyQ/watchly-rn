@@ -7,6 +7,7 @@ const ALIASES = {
 	"@": __dirname,
 };
 
+config.resolver.unstable_enablePackageExports = true;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
 	// Ensure you call the default resolver.
 	return context.resolveRequest(

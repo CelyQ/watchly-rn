@@ -1,62 +1,74 @@
-import React, { useCallback, useEffect, useState } from "react";
-import * as WebBrowser from "expo-web-browser";
-import * as AuthSession from "expo-auth-session";
-import { useSSO, useAuth } from "@clerk/clerk-expo";
 import { Redirect } from "expo-router";
+import React, { useState } from "react";
 import {
-	View,
-	Text,
-	TouchableOpacity,
-	StyleSheet,
-	SafeAreaView,
+	Alert,
 	Image,
 	Platform,
-	Alert,
+	SafeAreaView,
+	StyleSheet,
+	Text,
+	TouchableOpacity,
+	View,
 } from "react-native";
-
-export const useWarmUpBrowser = () => {
-	useEffect(() => {
-		void WebBrowser.warmUpAsync();
-		return () => {
-			void WebBrowser.coolDownAsync();
-		};
-	}, []);
-};
-
-WebBrowser.maybeCompleteAuthSession();
+import { authClient } from "@/lib/auth-client";
 
 export default function Page() {
-	useWarmUpBrowser();
-	const { startSSOFlow } = useSSO();
-	const { isSignedIn } = useAuth();
+	const { data: session, isPending } = authClient.useSession();
 	const [isLoading, setIsLoading] = useState(false);
 
-	if (isSignedIn) return <Redirect href="/" />;
+	if (isPending) {
+		return (
+			<SafeAreaView style={styles.container}>
+				<View style={styles.content}>
+					<Text style={styles.title}>Loading...</Text>
+				</View>
+			</SafeAreaView>
+		);
+	}
 
-	const handleSSO = useCallback(
-		(strategy: "oauth_google" | "oauth_apple") => async () => {
-			try {
-				setIsLoading(true);
-				const { createdSessionId, setActive } = await startSSOFlow({
-					strategy,
-					redirectUrl: AuthSession.makeRedirectUri(),
-				});
+	if (session?.user) {
+		return <Redirect href="/" />;
+	}
 
-				if (createdSessionId && setActive) {
-					await setActive({ session: createdSessionId });
-				}
-			} catch (err) {
-				console.error("SSO Error:", err);
+	const handleSocialSignIn = async (provider: "google" | "apple") => {
+		try {
+			setIsLoading(true);
+			const baseURL = process.env.EXPO_PUBLIC_BETTER_AUTH_URL;
+
+			if (!baseURL) {
 				Alert.alert(
-					"Sign In Error",
-					"There was a problem signing in. Please try again.",
+					"Configuration Error",
+					"EXPO_PUBLIC_BETTER_AUTH_URL is not set. Please configure it in your .env file.",
 				);
-			} finally {
 				setIsLoading(false);
+				return;
 			}
-		},
-		[startSSOFlow],
-	);
+
+			console.log("Starting social sign-in with provider:", provider);
+			console.log("Base URL:", baseURL);
+
+			const result = await authClient.signIn.social({
+				provider,
+				callbackURL: "watchly-rn://",
+			});
+
+			console.log("Sign-in result:", result);
+		} catch (err) {
+			console.error("Sign In Error Details:", err);
+			console.error(
+				"Error stack:",
+				err instanceof Error ? err.stack : "No stack",
+			);
+			const errorMessage =
+				err instanceof Error ? err.message : JSON.stringify(err);
+			Alert.alert(
+				"Sign In Error",
+				`There was a problem signing in: ${errorMessage}`,
+			);
+		} finally {
+			setIsLoading(false);
+		}
+	};
 
 	return (
 		<SafeAreaView style={styles.container}>
@@ -65,7 +77,7 @@ export default function Page() {
 				<Text style={styles.subtitle}>Sign in to continue</Text>
 				<TouchableOpacity
 					style={[styles.button, isLoading && styles.buttonDisabled]}
-					onPress={handleSSO("oauth_google")}
+					onPress={() => handleSocialSignIn("google")}
 					disabled={isLoading}
 				>
 					<Text style={styles.buttonText}>Continue with Google</Text>
@@ -77,7 +89,7 @@ export default function Page() {
 				{Platform.OS === "ios" && (
 					<TouchableOpacity
 						style={[styles.button, isLoading && styles.buttonDisabled]}
-						onPress={handleSSO("oauth_apple")}
+						onPress={() => handleSocialSignIn("apple")}
 						disabled={isLoading}
 					>
 						<Text style={styles.buttonText}>Continue with Apple</Text>

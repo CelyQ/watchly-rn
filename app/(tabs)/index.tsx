@@ -1,58 +1,87 @@
-import type { RapidAPIIMDBSearchResponseDataEntity } from "@/types/rapidapi.type";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import {
+	Animated,
+	Image,
 	SafeAreaView,
 	StatusBar,
 	StyleSheet,
 	Text,
+	TextInput,
+	TouchableOpacity,
 	View,
-	ScrollView,
-	Animated,
-	Pressable,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { MediaItem } from "@/components/media-item";
-import { useAuth } from "@clerk/clerk-expo";
-import { useEffect, useState, useCallback } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { Search } from "react-native-feather";
+import { TrendingMedia } from "@/components/trending-media";
+import { authClient } from "@/lib/auth-client";
 
 const HEADER_HEIGHT = 60;
 
-const Index = () => {
-	const router = useRouter();
-	const { getToken, isLoaded, isSignedIn } = useAuth();
-	const [isAuthReady, setIsAuthReady] = useState(false);
+// Function to calculate string similarity (0 to 1)
+const calculateSimilarity = (str1: string, str2: string): number => {
+	const s1 = str1.toLowerCase();
+	const s2 = str2.toLowerCase();
 
-	useEffect(() => {
-		if (isLoaded) {
-			setIsAuthReady(true);
+	// Exact match
+	if (s1 === s2) return 1;
+
+	// Contains match
+	if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+
+	// Calculate Levenshtein distance
+	const matrix: number[][] = [];
+
+	for (let i = 0; i <= s1.length; i++) {
+		matrix[i] = [i];
+	}
+
+	for (let j = 0; j <= s2.length; j++) {
+		if (matrix[0]) {
+			matrix[0][j] = j;
 		}
-	}, [isLoaded]);
+	}
 
-	const {
-		data: myShows,
-		isLoading: isMyShowsLoading,
-		error: showsError,
-		refetch: refetchShows,
-	} = useQuery({
-		queryKey: ["my-shows"],
+	for (let i = 1; i <= s1.length; i++) {
+		for (let j = 1; j <= s2.length; j++) {
+			const row = matrix[i];
+			const prevRow = matrix[i - 1];
+			if (row && prevRow) {
+				if (s1[i - 1] === s2[j - 1]) {
+					row[j] = prevRow[j - 1] ?? 0;
+				} else {
+					row[j] = Math.min(
+						(prevRow[j - 1] ?? 0) + 1,
+						(row[j - 1] ?? 0) + 1,
+						(prevRow[j] ?? 0) + 1,
+					);
+				}
+			}
+		}
+	}
+
+	const maxLength = Math.max(s1.length, s2.length);
+	const finalRow = matrix[s1.length];
+	const finalValue = finalRow?.[s2.length] ?? 0;
+	return 1 - finalValue / maxLength;
+};
+
+const App = () => {
+	const router = useRouter();
+	const [searchQuery, setSearchQuery] = useState("");
+
+	const { data: searchResults, isLoading: isSearchLoading } = useQuery({
+		queryKey: ["search", searchQuery],
 		queryFn: async () => {
-			if (!isSignedIn) {
-				throw new Error("Not authenticated");
-			}
-
-			const token = await getToken();
-			if (!token) {
-				throw new Error("No auth token available");
-			}
-
+			if (!searchQuery.trim()) return null;
+			const cookies = authClient.getCookie();
 			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/tv/saved`,
+				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/search?q=${encodeURIComponent(searchQuery)}`,
 				{
 					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
+						...(cookies ? { Cookie: cookies } : {}),
 					},
+					credentials: "omit",
 				},
 			);
 
@@ -60,99 +89,21 @@ const Index = () => {
 				throw new Error("Rate limit exceeded");
 			}
 
-			if (!response.ok) {
-				throw new Error(`API error: ${response.status}`);
-			}
-
-			const data = (await response.json()) as {
-				tvShows: {
-					overview: RapidAPIIMDBSearchResponseDataEntity;
-				}[];
-			};
-
-			return data.tvShows.map((t) => t.overview);
+			const data = await response.json();
+			return data;
 		},
-		retry: 2,
-		enabled: isAuthReady && isSignedIn,
+		enabled: searchQuery.trim().length > 0,
 	});
 
-	const {
-		data: myMovies,
-		isLoading: isMyMoviesLoading,
-		error: moviesError,
-		refetch: refetchMovies,
-	} = useQuery({
-		queryKey: ["my-movies"],
-		queryFn: async () => {
-			if (!isSignedIn) {
-				throw new Error("Not authenticated");
-			}
+	const sortedSearchResults = useMemo(() => {
+		if (!searchResults || !searchQuery.trim()) return searchResults;
 
-			const token = await getToken();
-			if (!token) {
-				throw new Error("No auth token available");
-			}
-
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/movie/saved`,
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-						"Content-Type": "application/json",
-					},
-				},
-			);
-
-			if (response.status === 429) {
-				throw new Error("Rate limit exceeded");
-			}
-
-			if (!response.ok) {
-				throw new Error(`API error: ${response.status}`);
-			}
-
-			const data = (await response.json()) as {
-				movies: {
-					overview: RapidAPIIMDBSearchResponseDataEntity;
-				}[];
-			};
-
-			return data.movies.map((m) => m.overview);
-		},
-		retry: 2,
-		enabled: isAuthReady && isSignedIn,
-	});
-
-	useFocusEffect(
-		useCallback(() => {
-			if (isAuthReady && isSignedIn) {
-				void refetchShows();
-				void refetchMovies();
-			}
-		}, [isAuthReady, isSignedIn, refetchShows, refetchMovies]),
-	);
-
-	if (!isAuthReady) {
-		return (
-			<SafeAreaView style={styles.container}>
-				<StatusBar barStyle="light-content" backgroundColor="#000" />
-				<View style={styles.loadingContainer}>
-					<Text style={styles.loadingText}>Loading...</Text>
-				</View>
-			</SafeAreaView>
-		);
-	}
-
-	if (!isSignedIn) {
-		return (
-			<SafeAreaView style={styles.container}>
-				<StatusBar barStyle="light-content" backgroundColor="#000" />
-				<View style={styles.loadingContainer}>
-					<Text style={styles.loadingText}>Please sign in to continue</Text>
-				</View>
-			</SafeAreaView>
-		);
-	}
+		return [...searchResults].sort((a, b) => {
+			const similarityA = calculateSimilarity(a.titleText.text, searchQuery);
+			const similarityB = calculateSimilarity(b.titleText.text, searchQuery);
+			return similarityB - similarityA;
+		});
+	}, [searchResults, searchQuery]);
 
 	return (
 		<SafeAreaView style={styles.container}>
@@ -161,120 +112,84 @@ const Index = () => {
 			<Animated.ScrollView
 				style={styles.scrollView}
 				showsVerticalScrollIndicator={false}
+				// onScroll={scrollHandler}
 				scrollEventThrottle={16}
 				contentContainerStyle={{ paddingTop: HEADER_HEIGHT }}
 			>
-				<View style={styles.section}>
-					<Text style={styles.sectionLabel}>MY LIST</Text>
-					<Text style={styles.sectionTitle}>Shows</Text>
-
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						style={styles.mediaScroll}
-					>
-						{isMyShowsLoading && (
-							<Text style={styles.loadingText}>Loading...</Text>
-						)}
-						{showsError && (
-							<View style={styles.errorContainer}>
-								<Text style={styles.errorText}>
-									Error loading shows: {showsError.message}
-								</Text>
-							</View>
-						)}
-						{!isMyShowsLoading &&
-							!showsError &&
-							(!myShows || myShows.length === 0) && (
-								<View style={styles.emptyStateContainer}>
-									<Text style={styles.emptyStateText}>
-										Your shows list is empty
-									</Text>
-									<Pressable onPress={() => router.push("/discover")}>
-										<Text style={styles.discoveryLinkText}>
-											Discover new shows →
-										</Text>
-									</Pressable>
-								</View>
-							)}
-						{myShows?.map((t, i) => {
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", t.titleText.text);
-
-							return (
-								<MediaItem
-									key={`${t.id}-${i}`}
-									title={t?.titleText?.text ?? ""}
-									imageUrl={t?.primaryImage?.url ?? placeholder.toString()}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: t.id },
-										})
-									}
-								/>
-							);
-						})}
-					</ScrollView>
+				{/* Search Bar */}
+				<View style={styles.searchBarContainer}>
+					<Search
+						stroke="#999"
+						width={20}
+						height={20}
+						style={styles.searchBarIcon}
+					/>
+					<TextInput
+						style={styles.searchInput}
+						placeholder="Search"
+						placeholderTextColor="#999"
+						value={searchQuery}
+						onChangeText={setSearchQuery}
+						keyboardAppearance="dark"
+						selectionColor="#b14aed"
+					/>
 				</View>
 
-				<View style={styles.section}>
-					<Text style={styles.sectionLabel}>MY LIST</Text>
-					<Text style={styles.sectionTitle}>Movies</Text>
+				{searchQuery.trim().length > 0 && (
+					<View style={styles.section}>
+						<Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
+						<Text style={styles.sectionTitle}>Found</Text>
 
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						style={styles.mediaScroll}
-					>
-						{isMyMoviesLoading && (
-							<Text style={styles.loadingText}>Loading...</Text>
-						)}
-						{moviesError && (
-							<View style={styles.errorContainer}>
-								<Text style={styles.errorText}>
-									Error loading movies: {moviesError.message}
-								</Text>
-							</View>
-						)}
-						{!isMyMoviesLoading &&
-							!moviesError &&
-							(!myMovies || myMovies.length === 0) && (
-								<View style={styles.emptyStateContainer}>
-									<Text style={styles.emptyStateText}>
-										Your movies list is empty
-									</Text>
-									<Pressable onPress={() => router.push("/discover")}>
-										<Text style={styles.discoveryLinkText}>
-											Discover new movies →
-										</Text>
-									</Pressable>
-								</View>
+						<View style={styles.searchResultsContainer}>
+							{isSearchLoading && (
+								<Text style={styles.loadingText}>Searching...</Text>
 							)}
-						{myMovies?.map((m, i) => {
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", m?.titleText?.text ?? "");
+							{sortedSearchResults?.map((item, i: number) => {
+								const placeholder = new URL(
+									"https://via.placeholder.com/150x225/333/fff",
+								);
+								placeholder.searchParams.set("text", item.titleText.text);
 
-							return (
-								<MediaItem
-									key={`${m.id}-${i}`}
-									title={m?.titleText?.text ?? ""}
-									imageUrl={m.primaryImage?.url ?? placeholder.toString()}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: m.id },
-										})
-									}
-								/>
-							);
-						})}
-					</ScrollView>
-				</View>
+								return (
+									<TouchableOpacity
+										key={`${item.id}-${i}`}
+										style={styles.searchResultItem}
+										onPress={() =>
+											router.push({
+												pathname: "/show-detail/[id]",
+												params: { id: item.id },
+											})
+										}
+									>
+										<Image
+											source={{
+												uri: item.primaryImage?.url ?? placeholder.toString(),
+											}}
+											style={styles.searchResultImage}
+										/>
+										<View style={styles.searchResultInfo}>
+											<Text style={styles.searchResultTitle}>
+												{item.titleText.text}
+											</Text>
+											{item.releaseYear && (
+												<Text style={styles.searchResultYear}>
+													{item.releaseYear.year}
+												</Text>
+											)}
+										</View>
+									</TouchableOpacity>
+								);
+							})}
+						</View>
+					</View>
+				)}
+
+				{searchQuery.trim().length === 0 && (
+					<>
+						<TrendingMedia mediaType="tv" title="Shows" />
+						<TrendingMedia mediaType="movie" title="Movies" />
+					</>
+				)}
 				<View style={{ height: 80 }} />
 			</Animated.ScrollView>
 		</SafeAreaView>
@@ -288,6 +203,46 @@ const styles = StyleSheet.create({
 	},
 	scrollView: {
 		flex: 1,
+	},
+	searchBarContainer: {
+		flexDirection: "row",
+		alignItems: "center",
+		backgroundColor: "#333",
+		borderRadius: 10,
+		marginHorizontal: 20,
+		paddingHorizontal: 15,
+		height: 50,
+		marginTop: 20,
+	},
+	searchBarIcon: {
+		marginRight: 10,
+	},
+	searchInput: {
+		flex: 1,
+		color: "#fff",
+		fontSize: 16,
+	},
+	quickActions: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		marginHorizontal: 20,
+		marginTop: 20,
+	},
+	actionButton: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "center",
+		backgroundColor: "#222",
+		borderRadius: 10,
+		paddingVertical: 15,
+		paddingHorizontal: 20,
+		width: "48%",
+	},
+	actionText: {
+		color: "#b14aed",
+		fontSize: 16,
+		fontWeight: "500",
+		marginLeft: 10,
 	},
 	section: {
 		marginTop: 30,
@@ -304,43 +259,40 @@ const styles = StyleSheet.create({
 		fontWeight: "bold",
 		marginBottom: 15,
 	},
-	mediaScroll: {
-		marginLeft: -10,
-	},
 	loadingText: {
 		color: "#fff",
 		fontSize: 16,
 		fontWeight: "500",
 	},
-	loadingContainer: {
+	searchResultsContainer: {
+		marginTop: 10,
+	},
+	searchResultItem: {
+		flexDirection: "row",
+		alignItems: "center",
+		marginBottom: 15,
+		backgroundColor: "#222",
+		borderRadius: 10,
+		overflow: "hidden",
+	},
+	searchResultImage: {
+		width: 80,
+		height: 120,
+	},
+	searchResultInfo: {
 		flex: 1,
-		justifyContent: "center",
-		alignItems: "center",
+		padding: 15,
 	},
-	emptyStateContainer: {
-		padding: 20,
-		alignItems: "center",
-	},
-	emptyStateText: {
-		color: "#666",
-		fontSize: 16,
-		marginBottom: 10,
-	},
-	discoveryLinkText: {
+	searchResultTitle: {
 		color: "#fff",
 		fontSize: 16,
-		fontWeight: "500",
-		textDecorationLine: "underline",
+		fontWeight: "600",
+		marginBottom: 5,
 	},
-	errorContainer: {
-		padding: 20,
-		alignItems: "center",
-	},
-	errorText: {
-		color: "#ff4444",
-		fontSize: 16,
-		textAlign: "center",
+	searchResultYear: {
+		color: "#999",
+		fontSize: 14,
 	},
 });
 
-export default Index;
+export default App;

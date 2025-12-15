@@ -7,7 +7,7 @@
 		"icon": "./assets/icon.png",
 		"userInterfaceStyle": "dark",
 		"newArchEnabled": true,
-		"scheme": "watchly",
+		"scheme": "watchly-rn",
 		"splash": {
 			"image": "./assets/splash-icon.png",
 			"resizeMode": "contain",
