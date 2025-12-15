@@ -4,12 +4,12 @@ import {
 	Alert,
 	Image,
 	Platform,
-	SafeAreaView,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
 	View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { authClient } from "@/lib/auth-client";
 
 export default function Page() {

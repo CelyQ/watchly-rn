@@ -6,7 +6,6 @@ import {
 	Animated,
 	Image,
 	Platform,
-	SafeAreaView,
 	ScrollView,
 	StyleSheet,
 	Text,
@@ -14,6 +13,7 @@ import {
 	View,
 } from "react-native";
 import { ArrowLeft } from "react-native-feather";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { queryClient } from "@/app/_layout";
 import { $api } from "@/lib/api";
 

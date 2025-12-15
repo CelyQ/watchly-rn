@@ -1,6 +1,7 @@
-import { authClient } from "@/lib/auth-client";
-import { View, Text, StyleSheet, SafeAreaView } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { SignOutButton } from "@/components/sign-out-button";
+import { authClient } from "@/lib/auth-client";
 
 export default function User() {
 	const { data: session } = authClient.useSession();
@@ -8,9 +9,7 @@ export default function User() {
 	return (
 		<SafeAreaView style={styles.container}>
 			<View style={styles.content}>
-				<Text style={styles.text}>
-					Hello {session?.user?.email}
-				</Text>
+				<Text style={styles.text}>Hello {session?.user?.email}</Text>
 				<SignOutButton />
 			</View>
 		</SafeAreaView>

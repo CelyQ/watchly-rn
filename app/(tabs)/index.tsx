@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
 	Animated,
 	Image,
-	SafeAreaView,
 	StatusBar,
 	StyleSheet,
 	Text,
@@ -13,6 +12,7 @@ import {
 	View,
 } from "react-native";
 import { Search } from "react-native-feather";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { TrendingMedia } from "@/components/trending-media";
 import { authClient } from "@/lib/auth-client";
 
