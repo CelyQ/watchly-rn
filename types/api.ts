@@ -728,7 +728,7 @@ export interface operations {
     getApiV1MediaGetMostPopular: {
         parameters: {
             query?: {
-                limit?: number;
+                limit?: string | number;
                 mediaType?: "movie" | "tv" | "all";
             };
             header?: never;
@@ -767,8 +767,8 @@ export interface operations {
                                     releaseDate: {
                                         /** @constant */
                                         __typename: "ReleaseDate";
-                                        month: number;
-                                        day: number;
+                                        month: number | null;
+                                        day: number | null;
                                         year: number;
                                         country: {
                                             id: string;
