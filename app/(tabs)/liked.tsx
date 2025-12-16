@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Animated,
 	Pressable,
@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MediaItem } from "@/components/media-item";
+import { $api, fetchClient } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 
 const HEADER_HEIGHT = 60;
@@ -29,49 +30,101 @@ const Index = () => {
 	}, [isPending]);
 
 	const {
-		data: myShows,
-		isLoading: isMyShowsLoading,
-		error: showsError,
-	} = useQuery<
-		Array<{
-			id: string;
-			titleText: { text: string };
-			primaryImage?: { url: string };
-		}>
-	>({
-		queryKey: ["my-shows"],
-		queryFn: async () => {
-			// Endpoint removed - return empty array
-			return [];
-		},
-		retry: 2,
-		enabled: false, // Disabled - endpoint removed
+		data: likesData,
+		isLoading: isLikesLoading,
+		error: likesError,
+		refetch: refetchLikes,
+	} = $api.useQuery("get", "/api/v1/likes/list");
+
+	const likes = likesData?.likes ?? [];
+
+	// Fetch details for all liked items in parallel
+	const detailQueries = useQueries({
+		queries: likes.map(
+			(like: {
+				id: number;
+				userId: string;
+				imdbId: string;
+				mediaType: "movie" | "tv";
+				createdAt: string | number | Record<string, never>;
+			}) => ({
+				queryKey: ["title-details", like.imdbId],
+				queryFn: async () => {
+					const result = await fetchClient.GET(
+						"/api/v1/media/getTitleDetails",
+						{
+							params: {
+								query: {
+									tt: like.imdbId,
+								},
+							},
+						},
+					);
+					return {
+						like,
+						details: result.data,
+					};
+				},
+				enabled: likes.length > 0,
+				retry: 2,
+			}),
+		),
 	});
 
-	const {
-		data: myMovies,
-		isLoading: isMyMoviesLoading,
-		error: moviesError,
-	} = useQuery<
-		Array<{
-			id: string;
-			titleText: { text: string };
-			primaryImage?: { url: string };
-		}>
-	>({
-		queryKey: ["my-movies"],
-		queryFn: async () => {
-			// Endpoint removed - return empty array
-			return [];
-		},
-		retry: 2,
-		enabled: false, // Disabled - endpoint removed
-	});
+	const isLoadingDetails = detailQueries.some((query) => query.isLoading);
+	const hasDetailsError = detailQueries.some((query) => query.error);
+
+	// Group liked items by media type
+	const { shows, movies } = useMemo(() => {
+		const showsList: Array<{
+			like: { id: number; imdbId: string; mediaType: "movie" | "tv" };
+			details:
+				| {
+						title?: {
+							titleText?: { text?: string };
+							primaryImage?: { url?: string };
+						};
+				  }
+				| undefined;
+		}> = [];
+		const moviesList: Array<{
+			like: { id: number; imdbId: string; mediaType: "movie" | "tv" };
+			details:
+				| {
+						title?: {
+							titleText?: { text?: string };
+							primaryImage?: { url?: string };
+						};
+				  }
+				| undefined;
+		}> = [];
+
+		detailQueries.forEach((query) => {
+			if (query.data?.like && query.data?.details) {
+				if (query.data.like.mediaType === "tv") {
+					showsList.push(query.data);
+				} else {
+					moviesList.push(query.data);
+				}
+			}
+		});
+
+		return { shows: showsList, movies: moviesList };
+	}, [detailQueries]);
+
+	const isMyShowsLoading = isLikesLoading || isLoadingDetails;
+	const isMyMoviesLoading = isLikesLoading || isLoadingDetails;
+	const showsError =
+		likesError ||
+		(hasDetailsError ? new Error("Failed to load show details") : null);
+	const moviesError =
+		likesError ||
+		(hasDetailsError ? new Error("Failed to load movie details") : null);
 
 	useFocusEffect(
 		useCallback(() => {
-			// Both refetchShows and refetchMovies removed - endpoints disabled
-		}, []),
+			void refetchLikes();
+		}, [refetchLikes]),
 	);
 
 	if (!isAuthReady) {
@@ -125,35 +178,35 @@ const Index = () => {
 								</Text>
 							</View>
 						)}
-						{!isMyShowsLoading &&
-							!showsError &&
-							(!myShows || myShows.length === 0) && (
-								<View style={styles.emptyStateContainer}>
-									<Text style={styles.emptyStateText}>
-										Your shows list is empty
+						{!isMyShowsLoading && !showsError && shows.length === 0 && (
+							<View style={styles.emptyStateContainer}>
+								<Text style={styles.emptyStateText}>
+									Your shows list is empty
+								</Text>
+								<Pressable onPress={() => router.push("/")}>
+									<Text style={styles.discoveryLinkText}>
+										Discover new shows →
 									</Text>
-									<Pressable onPress={() => router.push("/")}>
-										<Text style={styles.discoveryLinkText}>
-											Discover new shows →
-										</Text>
-									</Pressable>
-								</View>
-							)}
-						{myShows?.map((t, i) => {
+								</Pressable>
+							</View>
+						)}
+						{shows.map((item, i) => {
+							const title = item.details?.title?.titleText?.text ?? "";
+							const imageUrl = item.details?.title?.primaryImage?.url;
 							const placeholder = new URL(
 								"https://via.placeholder.com/150x225/333/fff",
 							);
-							placeholder.searchParams.set("text", t.titleText.text);
+							placeholder.searchParams.set("text", title);
 
 							return (
 								<MediaItem
-									key={`${t.id}-${i}`}
-									title={t?.titleText?.text ?? ""}
-									imageUrl={t?.primaryImage?.url ?? placeholder.toString()}
+									key={`${item.like.id}-${i}`}
+									title={title}
+									imageUrl={imageUrl ?? placeholder.toString()}
 									onPress={() =>
 										router.push({
 											pathname: "/show-detail/[id]",
-											params: { id: t.id },
+											params: { id: item.like.imdbId },
 										})
 									}
 								/>
@@ -181,35 +234,35 @@ const Index = () => {
 								</Text>
 							</View>
 						)}
-						{!isMyMoviesLoading &&
-							!moviesError &&
-							(!myMovies || myMovies.length === 0) && (
-								<View style={styles.emptyStateContainer}>
-									<Text style={styles.emptyStateText}>
-										Your movies list is empty
+						{!isMyMoviesLoading && !moviesError && movies.length === 0 && (
+							<View style={styles.emptyStateContainer}>
+								<Text style={styles.emptyStateText}>
+									Your movies list is empty
+								</Text>
+								<Pressable onPress={() => router.push("/")}>
+									<Text style={styles.discoveryLinkText}>
+										Discover new movies →
 									</Text>
-									<Pressable onPress={() => router.push("/")}>
-										<Text style={styles.discoveryLinkText}>
-											Discover new movies →
-										</Text>
-									</Pressable>
-								</View>
-							)}
-						{myMovies?.map((m, i) => {
+								</Pressable>
+							</View>
+						)}
+						{movies.map((item, i) => {
+							const title = item.details?.title?.titleText?.text ?? "";
+							const imageUrl = item.details?.title?.primaryImage?.url;
 							const placeholder = new URL(
 								"https://via.placeholder.com/150x225/333/fff",
 							);
-							placeholder.searchParams.set("text", m?.titleText?.text ?? "");
+							placeholder.searchParams.set("text", title);
 
 							return (
 								<MediaItem
-									key={`${m.id}-${i}`}
-									title={m?.titleText?.text ?? ""}
-									imageUrl={m.primaryImage?.url ?? placeholder.toString()}
+									key={`${item.like.id}-${i}`}
+									title={title}
+									imageUrl={imageUrl ?? placeholder.toString()}
 									onPress={() =>
 										router.push({
 											pathname: "/show-detail/[id]",
-											params: { id: m.id },
+											params: { id: item.like.imdbId },
 										})
 									}
 								/>

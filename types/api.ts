@@ -648,15 +648,20 @@ export interface operations {
                             imdbId: string;
                             isWatched: boolean;
                             updatedAt: Record<string, never> | string | number;
+                            title: string | null;
+                            posterUrl: string | null;
                         }[];
-                        episodes: {
-                            id: number;
-                            userId: string;
+                        tvShows: {
                             imdbId: string;
-                            seasonNumber: number;
-                            episodeNumber: number;
-                            isWatched: boolean;
-                            updatedAt: Record<string, never> | string | number;
+                            title: string | null;
+                            posterUrl: string | null;
+                            watchedEpisodes: number;
+                            totalEpisodes: number;
+                            totalSeasons: number | null;
+                            lastWatchedSeason: number | null;
+                            lastWatchedEpisode: number | null;
+                            isFullyWatched: boolean;
+                            updatedAt?: Record<string, never> | string | number;
                         }[];
                     };
                 };
