@@ -1,9 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Animated,
 	Image,
+	Keyboard,
+	Pressable,
+	ScrollView,
 	StatusBar,
 	StyleSheet,
 	Text,
@@ -11,36 +13,167 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
-import { Search } from "react-native-feather";
+import { Search, X } from "react-native-feather";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TrendingMedia } from "@/components/trending-media";
-import { authClient } from "@/lib/auth-client";
+import { $api } from "@/lib/api";
 
-const HEADER_HEIGHT = 60;
+// Custom hook for debouncing values
+const useDebouncedValue = <T,>(value: T, delay: number): T => {
+	const [debouncedValue, setDebouncedValue] = useState(value);
+
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setDebouncedValue(value);
+		}, delay);
+
+		return () => clearTimeout(timer);
+	}, [value, delay]);
+
+	return debouncedValue;
+};
+
+// Animated search result item component
+const AnimatedSearchResult = ({
+	item,
+	index,
+	onPress,
+}: {
+	item: {
+		id: string;
+		media_type: "movie" | "tv";
+		title?: string;
+		name?: string;
+		poster_path: string | null;
+		release_date?: string;
+		first_air_date?: string;
+		vote_average: number;
+	};
+	index: number;
+	onPress: () => void;
+}) => {
+	const fadeAnim = useRef(new Animated.Value(0)).current;
+	const slideAnim = useRef(new Animated.Value(20)).current;
+
+	useEffect(() => {
+		Animated.parallel([
+			Animated.timing(fadeAnim, {
+				toValue: 1,
+				duration: 300,
+				delay: index * 50,
+				useNativeDriver: true,
+			}),
+			Animated.timing(slideAnim, {
+				toValue: 0,
+				duration: 300,
+				delay: index * 50,
+				useNativeDriver: true,
+			}),
+		]).start();
+	}, [fadeAnim, slideAnim, index]);
+
+	const title = item.media_type === "movie" ? item.title : item.name;
+	const releaseDate =
+		item.media_type === "movie" ? item.release_date : item.first_air_date;
+	const year = releaseDate?.split("-")[0];
+	const posterUrl = item.poster_path
+		? `https://image.tmdb.org/t/p/w500${item.poster_path}`
+		: null;
+
+	return (
+		<Animated.View
+			style={{
+				opacity: fadeAnim,
+				transform: [{ translateY: slideAnim }],
+			}}
+		>
+			<TouchableOpacity
+				style={styles.searchResultItem}
+				onPress={onPress}
+				activeOpacity={0.7}
+			>
+				{posterUrl ? (
+					<Image source={{ uri: posterUrl }} style={styles.searchResultImage} />
+				) : (
+					<View style={[styles.searchResultImage, styles.posterPlaceholder]}>
+						<Search stroke="#444" width={24} height={24} />
+					</View>
+				)}
+				<View style={styles.searchResultInfo}>
+					<Text style={styles.searchResultTitle} numberOfLines={2}>
+						{title}
+					</Text>
+					<View style={styles.searchResultMeta}>
+						{year && <Text style={styles.searchResultYear}>{year}</Text>}
+						<View style={styles.mediaTypeBadge}>
+							<Text style={styles.mediaTypeText}>
+								{item.media_type === "movie" ? "Movie" : "TV"}
+							</Text>
+						</View>
+					</View>
+					{item.vote_average > 0 && (
+						<View style={styles.ratingContainer}>
+							<Text style={styles.ratingText}>
+								★ {item.vote_average.toFixed(1)}
+							</Text>
+						</View>
+					)}
+				</View>
+			</TouchableOpacity>
+		</Animated.View>
+	);
+};
+
+// Loading skeleton for search results
+const SearchResultSkeleton = () => {
+	const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+	useEffect(() => {
+		Animated.loop(
+			Animated.sequence([
+				Animated.timing(shimmerAnim, {
+					toValue: 1,
+					duration: 800,
+					useNativeDriver: true,
+				}),
+				Animated.timing(shimmerAnim, {
+					toValue: 0,
+					duration: 800,
+					useNativeDriver: true,
+				}),
+			]),
+		).start();
+	}, [shimmerAnim]);
+
+	const opacity = shimmerAnim.interpolate({
+		inputRange: [0, 1],
+		outputRange: [0.3, 0.6],
+	});
+
+	return (
+		<View style={styles.searchResultItem}>
+			<Animated.View
+				style={[styles.searchResultImage, styles.skeletonImage, { opacity }]}
+			/>
+			<View style={styles.searchResultInfo}>
+				<Animated.View style={[styles.skeletonTitle, { opacity }]} />
+				<Animated.View style={[styles.skeletonMeta, { opacity }]} />
+			</View>
+		</View>
+	);
+};
 
 // Function to calculate string similarity (0 to 1)
 const calculateSimilarity = (str1: string, str2: string): number => {
 	const s1 = str1.toLowerCase();
 	const s2 = str2.toLowerCase();
 
-	// Exact match
 	if (s1 === s2) return 1;
-
-	// Contains match
 	if (s1.includes(s2) || s2.includes(s1)) return 0.8;
 
-	// Calculate Levenshtein distance
 	const matrix: number[][] = [];
-
-	for (let i = 0; i <= s1.length; i++) {
-		matrix[i] = [i];
-	}
-
-	for (let j = 0; j <= s2.length; j++) {
-		if (matrix[0]) {
-			matrix[0][j] = j;
-		}
-	}
+	for (let i = 0; i <= s1.length; i++) matrix[i] = [i];
+	for (let j = 0; j <= s2.length; j++) if (matrix[0]) matrix[0][j] = j;
 
 	for (let i = 1; i <= s1.length; i++) {
 		for (let j = 1; j <= s2.length; j++) {
@@ -69,129 +202,140 @@ const calculateSimilarity = (str1: string, str2: string): number => {
 const App = () => {
 	const router = useRouter();
 	const [searchQuery, setSearchQuery] = useState("");
+	const debouncedSearchQuery = useDebouncedValue(searchQuery, 400);
+	const inputRef = useRef<TextInput>(null);
 
-	const { data: searchResults, isLoading: isSearchLoading } = useQuery({
-		queryKey: ["search", searchQuery],
-		queryFn: async () => {
-			if (!searchQuery.trim()) return null;
-			const cookies = authClient.getCookie();
-			const response = await fetch(
-				`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/v1/search?q=${encodeURIComponent(searchQuery)}`,
-				{
-					headers: {
-						...(cookies ? { Cookie: cookies } : {}),
-					},
-					credentials: "omit",
+	const { data: searchResults, isLoading: isSearchLoading } = $api.useQuery(
+		"get",
+		"/api/v1/media/search",
+		{
+			params: {
+				query: {
+					query: debouncedSearchQuery,
+					page: 1,
 				},
-			);
-
-			if (response.status === 429) {
-				throw new Error("Rate limit exceeded");
-			}
-
-			const data = await response.json();
-			return data;
+			},
 		},
-		enabled: searchQuery.trim().length > 0,
-	});
+		{
+			enabled: debouncedSearchQuery.trim().length > 0,
+		},
+	);
 
 	const sortedSearchResults = useMemo(() => {
-		if (!searchResults || !searchQuery.trim()) return searchResults;
+		if (!searchResults?.results || !debouncedSearchQuery.trim())
+			return searchResults?.results;
 
-		return [...searchResults].sort((a, b) => {
-			const similarityA = calculateSimilarity(a.titleText.text, searchQuery);
-			const similarityB = calculateSimilarity(b.titleText.text, searchQuery);
+		return [...searchResults.results].sort((a, b) => {
+			const titleA = a.media_type === "movie" ? a.title : a.name;
+			const titleB = b.media_type === "movie" ? b.title : b.name;
+			const similarityA = calculateSimilarity(titleA, debouncedSearchQuery);
+			const similarityB = calculateSimilarity(titleB, debouncedSearchQuery);
 			return similarityB - similarityA;
 		});
-	}, [searchResults, searchQuery]);
+	}, [searchResults, debouncedSearchQuery]);
+
+	const isSearchActive = searchQuery.trim().length > 0;
+
+	const clearSearch = () => {
+		setSearchQuery("");
+		inputRef.current?.blur();
+		Keyboard.dismiss();
+	};
 
 	return (
 		<SafeAreaView style={styles.container}>
-			<StatusBar barStyle="light-content" backgroundColor="#000" />
+			<StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
 
-			<Animated.ScrollView
+			<ScrollView
 				style={styles.scrollView}
 				showsVerticalScrollIndicator={false}
-				// onScroll={scrollHandler}
-				scrollEventThrottle={16}
-				contentContainerStyle={{ paddingTop: HEADER_HEIGHT }}
+				keyboardShouldPersistTaps="handled"
 			>
 				{/* Search Bar */}
-				<View style={styles.searchBarContainer}>
-					<Search
-						stroke="#999"
-						width={20}
-						height={20}
-						style={styles.searchBarIcon}
-					/>
-					<TextInput
-						style={styles.searchInput}
-						placeholder="Search"
-						placeholderTextColor="#999"
-						value={searchQuery}
-						onChangeText={setSearchQuery}
-						keyboardAppearance="dark"
-						selectionColor="#b14aed"
-					/>
+				<View style={styles.searchBarWrapper}>
+					<View style={styles.searchBarContainer}>
+						<Search
+							stroke="#666"
+							width={20}
+							height={20}
+							style={styles.searchBarIcon}
+						/>
+						<TextInput
+							ref={inputRef}
+							style={styles.searchInput}
+							placeholder="Search movies & shows..."
+							placeholderTextColor="#555"
+							value={searchQuery}
+							onChangeText={setSearchQuery}
+							keyboardAppearance="dark"
+							selectionColor="#b14aed"
+							returnKeyType="search"
+						/>
+						{searchQuery.length > 0 && (
+							<Pressable onPress={clearSearch} style={styles.clearButton}>
+								<X stroke="#666" width={18} height={18} />
+							</Pressable>
+						)}
+					</View>
 				</View>
 
-				{searchQuery.trim().length > 0 && (
-					<View style={styles.section}>
-						<Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
-						<Text style={styles.sectionTitle}>Found</Text>
-
-						<View style={styles.searchResultsContainer}>
-							{isSearchLoading && (
-								<Text style={styles.loadingText}>Searching...</Text>
+				{/* Search Results */}
+				{isSearchActive && (
+					<View style={styles.searchResultsSection}>
+						<View style={styles.resultsHeader}>
+							<Text style={styles.resultsTitle}>Results</Text>
+							{sortedSearchResults && sortedSearchResults.length > 0 && (
+								<Text style={styles.resultsCount}>
+									{sortedSearchResults.length} found
+								</Text>
 							)}
-							{sortedSearchResults?.map((item, i: number) => {
-								const placeholder = new URL(
-									"https://via.placeholder.com/150x225/333/fff",
-								);
-								placeholder.searchParams.set("text", item.titleText.text);
-
-								return (
-									<TouchableOpacity
-										key={`${item.id}-${i}`}
-										style={styles.searchResultItem}
-										onPress={() =>
-											router.push({
-												pathname: "/show-detail/[id]",
-												params: { id: item.id },
-											})
-										}
-									>
-										<Image
-											source={{
-												uri: item.primaryImage?.url ?? placeholder.toString(),
-											}}
-											style={styles.searchResultImage}
-										/>
-										<View style={styles.searchResultInfo}>
-											<Text style={styles.searchResultTitle}>
-												{item.titleText.text}
-											</Text>
-											{item.releaseYear && (
-												<Text style={styles.searchResultYear}>
-													{item.releaseYear.year}
-												</Text>
-											)}
-										</View>
-									</TouchableOpacity>
-								);
-							})}
 						</View>
+
+						{isSearchLoading && (
+							<View>
+								<SearchResultSkeleton />
+								<SearchResultSkeleton />
+								<SearchResultSkeleton />
+							</View>
+						)}
+
+						{!isSearchLoading && sortedSearchResults?.length === 0 && (
+							<View style={styles.emptyState}>
+								<Search stroke="#333" width={48} height={48} />
+								<Text style={styles.emptyStateText}>No results found</Text>
+								<Text style={styles.emptyStateSubtext}>
+									Try a different search term
+								</Text>
+							</View>
+						)}
+
+						{!isSearchLoading &&
+							sortedSearchResults?.map((item, i) => (
+								<AnimatedSearchResult
+									key={`${item.id}-${i}`}
+									item={item}
+									index={i}
+									onPress={() =>
+										router.push({
+											pathname: "/show-detail/[id]",
+											params: { id: item.id },
+										})
+									}
+								/>
+							))}
 					</View>
 				)}
 
-				{searchQuery.trim().length === 0 && (
+				{/* Trending Content */}
+				{!isSearchActive && (
 					<>
 						<TrendingMedia mediaType="tv" title="Shows" />
 						<TrendingMedia mediaType="movie" title="Movies" />
 					</>
 				)}
-				<View style={{ height: 80 }} />
-			</Animated.ScrollView>
+
+				<View style={{ height: 100 }} />
+			</ScrollView>
 		</SafeAreaView>
 	);
 };
@@ -199,20 +343,23 @@ const App = () => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: "#000",
+		backgroundColor: "#0a0a0a",
 	},
 	scrollView: {
 		flex: 1,
 	},
+	searchBarWrapper: {
+		paddingHorizontal: 16,
+		paddingTop: 12,
+		paddingBottom: 8,
+	},
 	searchBarContainer: {
 		flexDirection: "row",
 		alignItems: "center",
-		backgroundColor: "#333",
-		borderRadius: 10,
-		marginHorizontal: 20,
-		paddingHorizontal: 15,
-		height: 50,
-		marginTop: 20,
+		backgroundColor: "#161616",
+		borderRadius: 12,
+		paddingHorizontal: 14,
+		height: 48,
 	},
 	searchBarIcon: {
 		marginRight: 10,
@@ -222,76 +369,118 @@ const styles = StyleSheet.create({
 		color: "#fff",
 		fontSize: 16,
 	},
-	quickActions: {
+	clearButton: {
+		padding: 6,
+		marginLeft: 4,
+		borderRadius: 10,
+		backgroundColor: "#252525",
+	},
+	searchResultsSection: {
+		paddingHorizontal: 16,
+		paddingTop: 16,
+	},
+	resultsHeader: {
 		flexDirection: "row",
 		justifyContent: "space-between",
-		marginHorizontal: 20,
-		marginTop: 20,
-	},
-	actionButton: {
-		flexDirection: "row",
 		alignItems: "center",
-		justifyContent: "center",
-		backgroundColor: "#222",
-		borderRadius: 10,
-		paddingVertical: 15,
-		paddingHorizontal: 20,
-		width: "48%",
+		marginBottom: 16,
 	},
-	actionText: {
-		color: "#b14aed",
-		fontSize: 16,
-		fontWeight: "500",
-		marginLeft: 10,
+	resultsTitle: {
+		color: "#fff",
+		fontSize: 24,
+		fontWeight: "700",
 	},
-	section: {
-		marginTop: 30,
-		paddingHorizontal: 20,
-	},
-	sectionLabel: {
+	resultsCount: {
 		color: "#666",
 		fontSize: 14,
-		fontWeight: "500",
-	},
-	sectionTitle: {
-		color: "#fff",
-		fontSize: 28,
-		fontWeight: "bold",
-		marginBottom: 15,
-	},
-	loadingText: {
-		color: "#fff",
-		fontSize: 16,
-		fontWeight: "500",
-	},
-	searchResultsContainer: {
-		marginTop: 10,
 	},
 	searchResultItem: {
 		flexDirection: "row",
-		alignItems: "center",
-		marginBottom: 15,
-		backgroundColor: "#222",
-		borderRadius: 10,
+		backgroundColor: "#161616",
+		borderRadius: 12,
+		marginBottom: 12,
 		overflow: "hidden",
 	},
 	searchResultImage: {
-		width: 80,
-		height: 120,
+		width: 85,
+		height: 128,
+		backgroundColor: "#1a1a1a",
+	},
+	posterPlaceholder: {
+		justifyContent: "center",
+		alignItems: "center",
 	},
 	searchResultInfo: {
 		flex: 1,
-		padding: 15,
+		padding: 14,
+		justifyContent: "center",
 	},
 	searchResultTitle: {
 		color: "#fff",
 		fontSize: 16,
 		fontWeight: "600",
-		marginBottom: 5,
+		marginBottom: 6,
+		lineHeight: 22,
+	},
+	searchResultMeta: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 8,
 	},
 	searchResultYear: {
-		color: "#999",
+		color: "#888",
 		fontSize: 14,
+	},
+	mediaTypeBadge: {
+		backgroundColor: "#252525",
+		paddingHorizontal: 8,
+		paddingVertical: 3,
+		borderRadius: 6,
+	},
+	mediaTypeText: {
+		color: "#888",
+		fontSize: 11,
+		fontWeight: "600",
+		textTransform: "uppercase",
+	},
+	ratingContainer: {
+		marginTop: 8,
+	},
+	ratingText: {
+		color: "#f5c518",
+		fontSize: 13,
+		fontWeight: "600",
+	},
+	emptyState: {
+		alignItems: "center",
+		paddingVertical: 60,
+	},
+	emptyStateText: {
+		color: "#666",
+		fontSize: 18,
+		fontWeight: "600",
+		marginTop: 16,
+	},
+	emptyStateSubtext: {
+		color: "#444",
+		fontSize: 14,
+		marginTop: 4,
+	},
+	skeletonImage: {
+		backgroundColor: "#1f1f1f",
+	},
+	skeletonTitle: {
+		height: 18,
+		width: "70%",
+		backgroundColor: "#1f1f1f",
+		borderRadius: 4,
+		marginBottom: 8,
+	},
+	skeletonMeta: {
+		height: 14,
+		width: "40%",
+		backgroundColor: "#1f1f1f",
+		borderRadius: 4,
 	},
 });
 
