@@ -35,14 +35,14 @@ export const MediaItem: React.FC<MediaItemProps> = ({
 
 const styles = StyleSheet.create({
 	mediaItem: {
-		width: 150,
-		marginRight: 15,
+		width: 120,
+		marginRight: 12,
 	},
 	mediaImage: {
-		width: 150,
-		height: 225,
+		width: 120,
+		height: 180,
 		borderRadius: 10,
-		backgroundColor: "#333",
+		backgroundColor: "#1a1a1a",
 	},
 	selectedBadge: {
 		position: "absolute",
@@ -57,9 +57,9 @@ const styles = StyleSheet.create({
 	},
 	mediaTitle: {
 		color: "#fff",
-		fontSize: 14,
-		fontWeight: "500",
+		fontSize: 13,
+		fontWeight: "600",
 		marginTop: 8,
-		textAlign: "center",
+		lineHeight: 18,
 	},
 });

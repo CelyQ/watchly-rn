@@ -3,22 +3,157 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	Animated,
+	Image,
 	Pressable,
 	ScrollView,
 	StatusBar,
 	StyleSheet,
 	Text,
+	TouchableOpacity,
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MediaItem } from "@/components/media-item";
 import { $api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 
 const HEADER_HEIGHT = 60;
+const CARD_WIDTH = 120;
+const CARD_IMAGE_HEIGHT = 180;
+
+type TvShow = {
+	imdbId: string;
+	title: string | null;
+	posterUrl: string | null;
+	watchedEpisodes: number;
+	totalEpisodes: number;
+	totalSeasons: number | null;
+	lastWatchedSeason: number | null;
+	lastWatchedEpisode: number | null;
+	isFullyWatched: boolean;
+	updatedAt: string | number | Record<string, never>;
+};
+
+type Movie = {
+	id: number;
+	userId: string;
+	imdbId: string;
+	isWatched: boolean;
+	updatedAt: string | number | Record<string, never>;
+	title: string | null;
+	posterUrl: string | null;
+};
+
+// Progress card for TV shows with episode info
+const TvProgressCard = ({
+	item,
+	onPress,
+	showProgress = true,
+}: {
+	item: TvShow;
+	onPress: () => void;
+	showProgress?: boolean;
+}) => {
+	const titleText = item.title ?? "Unknown";
+	const imageUrl = item.posterUrl;
+	const progress =
+		item.totalEpisodes > 0 ? item.watchedEpisodes / item.totalEpisodes : 0;
+
+	return (
+		<TouchableOpacity
+			onPress={onPress}
+			activeOpacity={0.8}
+			style={styles.progressCard}
+		>
+			{/* Poster */}
+			{imageUrl ? (
+				<Image
+					source={{ uri: imageUrl }}
+					style={[
+						styles.progressCardImage,
+						item.isFullyWatched && styles.imageWatched,
+					]}
+				/>
+			) : (
+				<View style={[styles.progressCardImage, styles.imagePlaceholder]}>
+					<Text style={styles.placeholderText}>{titleText[0] ?? "?"}</Text>
+				</View>
+			)}
+
+			{/* Progress bar */}
+			{showProgress && !item.isFullyWatched && (
+				<View style={styles.progressBarContainer}>
+					<View
+						style={[
+							styles.progressBar,
+							{ width: `${Math.min(progress * 100, 100)}%` },
+						]}
+					/>
+				</View>
+			)}
+
+			{/* Completed badge */}
+			{item.isFullyWatched && (
+				<View style={styles.completedBadge}>
+					<Text style={styles.completedBadgeText}>✓</Text>
+				</View>
+			)}
+
+			{/* Title */}
+			<Text style={styles.progressCardTitle} numberOfLines={2}>
+				{titleText}
+			</Text>
+
+			{/* Episode info */}
+			<Text style={styles.episodeInfo}>
+				{item.watchedEpisodes}/{item.totalEpisodes} episodes
+			</Text>
+
+			{/* Last watched (only for in-progress shows) */}
+			{!item.isFullyWatched &&
+				item.lastWatchedSeason !== null &&
+				item.lastWatchedEpisode !== null && (
+					<Text style={styles.lastWatchedInfo}>
+						S{item.lastWatchedSeason} E{item.lastWatchedEpisode}
+					</Text>
+				)}
+		</TouchableOpacity>
+	);
+};
+
+// Movie card (simpler, no progress info)
+const MovieCard = ({ item, onPress }: { item: Movie; onPress: () => void }) => {
+	const titleText = item.title ?? "Unknown";
+	const imageUrl = item.posterUrl;
+
+	return (
+		<TouchableOpacity
+			onPress={onPress}
+			activeOpacity={0.8}
+			style={styles.progressCard}
+		>
+			{imageUrl ? (
+				<Image source={{ uri: imageUrl }} style={styles.progressCardImage} />
+			) : (
+				<View style={[styles.progressCardImage, styles.imagePlaceholder]}>
+					<Text style={styles.placeholderText}>{titleText[0] ?? "?"}</Text>
+				</View>
+			)}
+
+			<View style={styles.completedBadge}>
+				<Text style={styles.completedBadgeText}>✓</Text>
+			</View>
+
+			<Text style={styles.progressCardTitle} numberOfLines={2}>
+				{titleText}
+			</Text>
+
+			<Text style={styles.episodeInfo}>Watched</Text>
+		</TouchableOpacity>
+	);
+};
 
 // Skeleton card component for loading state
-const MediaItemSkeleton = () => {
+const ProgressCardSkeleton = () => {
 	const shimmerAnim = useRef(new Animated.Value(0)).current;
 
 	useEffect(() => {
@@ -44,55 +179,12 @@ const MediaItemSkeleton = () => {
 	});
 
 	return (
-		<View style={skeletonStyles.mediaItem}>
-			<Animated.View style={[skeletonStyles.mediaImage, { opacity }]} />
-			<Animated.View style={[skeletonStyles.mediaTitle, { opacity }]} />
+		<View style={styles.progressCard}>
+			<Animated.View style={[styles.skeletonImage, { opacity }]} />
+			<Animated.View style={[styles.skeletonTitle, { opacity }]} />
+			<Animated.View style={[styles.skeletonSubtitle, { opacity }]} />
 		</View>
 	);
-};
-
-const skeletonStyles = StyleSheet.create({
-	mediaItem: {
-		width: 150,
-		marginRight: 15,
-	},
-	mediaImage: {
-		width: 150,
-		height: 225,
-		borderRadius: 10,
-		backgroundColor: "#333",
-	},
-	mediaTitle: {
-		height: 16,
-		width: 100,
-		borderRadius: 4,
-		backgroundColor: "#333",
-		marginTop: 8,
-		alignSelf: "center",
-	},
-});
-
-type TvShow = {
-	imdbId: string;
-	title: string | null;
-	posterUrl: string | null;
-	watchedEpisodes: number;
-	totalEpisodes: number;
-	totalSeasons: number | null;
-	lastWatchedSeason: number | null;
-	lastWatchedEpisode: number | null;
-	isFullyWatched: boolean;
-	updatedAt: string | number | Record<string, never>;
-};
-
-type Movie = {
-	id: number;
-	userId: string;
-	imdbId: string;
-	isWatched: boolean;
-	updatedAt: string | number | Record<string, never>;
-	title: string | null;
-	posterUrl: string | null;
 };
 
 const Index = () => {
@@ -178,6 +270,7 @@ const Index = () => {
 		title: string,
 		items: TvShow[],
 		sectionKey: string,
+		showProgress = true,
 	) => {
 		return (
 			<View style={styles.section} key={sectionKey}>
@@ -188,12 +281,13 @@ const Index = () => {
 					horizontal
 					showsHorizontalScrollIndicator={false}
 					style={styles.mediaScroll}
+					contentContainerStyle={styles.mediaScrollContent}
 				>
 					{isProgressLoading && (
 						<>
-							<MediaItemSkeleton />
-							<MediaItemSkeleton />
-							<MediaItemSkeleton />
+							<ProgressCardSkeleton />
+							<ProgressCardSkeleton />
+							<ProgressCardSkeleton />
 						</>
 					)}
 					{!isProgressLoading && !progressError && items.length === 0 && (
@@ -209,32 +303,19 @@ const Index = () => {
 						</View>
 					)}
 					{!isProgressLoading &&
-						items.map((item, i) => {
-							const titleText = item.title ?? "";
-							const imageUrl = item.posterUrl;
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", titleText || "No Title");
-
-							return (
-								<MediaItem
-									key={`${item.imdbId}-${i}`}
-									title={titleText}
-									imageUrl={
-										imageUrl && imageUrl.trim() !== ""
-											? imageUrl
-											: placeholder.toString()
-									}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: item.imdbId },
-										})
-									}
-								/>
-							);
-						})}
+						items.map((item, i) => (
+							<TvProgressCard
+								key={`${item.imdbId}-${i}`}
+								item={item}
+								showProgress={showProgress}
+								onPress={() =>
+									router.push({
+										pathname: "/show-detail/[id]",
+										params: { id: item.imdbId },
+									})
+								}
+							/>
+						))}
 				</ScrollView>
 			</View>
 		);
@@ -255,12 +336,13 @@ const Index = () => {
 					horizontal
 					showsHorizontalScrollIndicator={false}
 					style={styles.mediaScroll}
+					contentContainerStyle={styles.mediaScrollContent}
 				>
 					{isProgressLoading && (
 						<>
-							<MediaItemSkeleton />
-							<MediaItemSkeleton />
-							<MediaItemSkeleton />
+							<ProgressCardSkeleton />
+							<ProgressCardSkeleton />
+							<ProgressCardSkeleton />
 						</>
 					)}
 					{!isProgressLoading && !progressError && items.length === 0 && (
@@ -276,32 +358,18 @@ const Index = () => {
 						</View>
 					)}
 					{!isProgressLoading &&
-						items.map((item, i) => {
-							const titleText = item.title ?? "";
-							const imageUrl = item.posterUrl;
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", titleText || "No Title");
-
-							return (
-								<MediaItem
-									key={`${item.imdbId}-${i}`}
-									title={titleText}
-									imageUrl={
-										imageUrl && imageUrl.trim() !== ""
-											? imageUrl
-											: placeholder.toString()
-									}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: item.imdbId },
-										})
-									}
-								/>
-							);
-						})}
+						items.map((item, i) => (
+							<MovieCard
+								key={`${item.imdbId}-${i}`}
+								item={item}
+								onPress={() =>
+									router.push({
+										pathname: "/show-detail/[id]",
+										params: { id: item.imdbId },
+									})
+								}
+							/>
+						))}
 				</ScrollView>
 			</View>
 		);
@@ -318,16 +386,18 @@ const Index = () => {
 				contentContainerStyle={{ paddingTop: HEADER_HEIGHT }}
 			>
 				{renderTvShowSection(
-					"PROGRESS",
+					"IN PROGRESS",
 					"TV Shows",
 					progressTvShows,
 					"progress-tv",
+					true,
 				)}
 				{renderTvShowSection(
-					"WATCHED",
+					"COMPLETED",
 					"TV Shows",
 					finishedSeries,
 					"finished-tv",
+					false,
 				)}
 				{renderMovieSection(
 					"WATCHED",
@@ -344,28 +414,32 @@ const Index = () => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: "#000",
+		backgroundColor: "#0a0a0a",
 	},
 	scrollView: {
 		flex: 1,
 	},
 	section: {
-		marginTop: 30,
-		paddingHorizontal: 20,
+		marginTop: 24,
+		paddingHorizontal: 16,
 	},
 	sectionLabel: {
 		color: "#666",
-		fontSize: 14,
-		fontWeight: "500",
+		fontSize: 12,
+		fontWeight: "600",
+		letterSpacing: 1,
 	},
 	sectionTitle: {
 		color: "#fff",
-		fontSize: 28,
-		fontWeight: "bold",
-		marginBottom: 15,
+		fontSize: 24,
+		fontWeight: "700",
+		marginBottom: 14,
 	},
 	mediaScroll: {
-		marginLeft: -10,
+		marginLeft: -4,
+	},
+	mediaScrollContent: {
+		paddingRight: 16,
 	},
 	loadingText: {
 		color: "#fff",
@@ -383,23 +457,104 @@ const styles = StyleSheet.create({
 	},
 	emptyStateText: {
 		color: "#666",
-		fontSize: 16,
-		marginBottom: 10,
+		fontSize: 14,
+		marginBottom: 8,
 	},
 	discoveryLinkText: {
-		color: "#fff",
-		fontSize: 16,
-		fontWeight: "500",
-		textDecorationLine: "underline",
+		color: "#b14aed",
+		fontSize: 14,
+		fontWeight: "600",
 	},
-	errorContainer: {
-		padding: 20,
+	// Progress Card Styles
+	progressCard: {
+		width: CARD_WIDTH,
+		marginRight: 12,
+	},
+	progressCardImage: {
+		width: CARD_WIDTH,
+		height: CARD_IMAGE_HEIGHT,
+		borderRadius: 10,
+		backgroundColor: "#1a1a1a",
+	},
+	imageWatched: {
+		opacity: 0.7,
+	},
+	imagePlaceholder: {
+		justifyContent: "center",
 		alignItems: "center",
 	},
-	errorText: {
-		color: "#ff4444",
-		fontSize: 16,
-		textAlign: "center",
+	placeholderText: {
+		color: "#333",
+		fontSize: 32,
+		fontWeight: "bold",
+	},
+	progressBarContainer: {
+		width: CARD_WIDTH,
+		height: 3,
+		backgroundColor: "rgba(255,255,255,0.15)",
+		borderRadius: 1.5,
+		marginTop: 6,
+		overflow: "hidden",
+	},
+	progressBar: {
+		height: "100%",
+		backgroundColor: "#b14aed",
+		borderRadius: 1.5,
+	},
+	completedBadge: {
+		position: "absolute",
+		top: 8,
+		right: 8,
+		width: 24,
+		height: 24,
+		borderRadius: 12,
+		backgroundColor: "#b14aed",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	completedBadgeText: {
+		color: "#fff",
+		fontSize: 12,
+		fontWeight: "bold",
+	},
+	progressCardTitle: {
+		color: "#fff",
+		fontSize: 13,
+		fontWeight: "600",
+		marginTop: 8,
+		lineHeight: 18,
+	},
+	episodeInfo: {
+		color: "#888",
+		fontSize: 11,
+		marginTop: 2,
+	},
+	lastWatchedInfo: {
+		color: "#b14aed",
+		fontSize: 11,
+		fontWeight: "600",
+		marginTop: 2,
+	},
+	// Skeleton Styles
+	skeletonImage: {
+		width: CARD_WIDTH,
+		height: CARD_IMAGE_HEIGHT,
+		borderRadius: 10,
+		backgroundColor: "#1a1a1a",
+	},
+	skeletonTitle: {
+		height: 14,
+		width: CARD_WIDTH * 0.8,
+		borderRadius: 4,
+		backgroundColor: "#1a1a1a",
+		marginTop: 8,
+	},
+	skeletonSubtitle: {
+		height: 10,
+		width: CARD_WIDTH * 0.5,
+		borderRadius: 4,
+		backgroundColor: "#1a1a1a",
+		marginTop: 4,
 	},
 });
 

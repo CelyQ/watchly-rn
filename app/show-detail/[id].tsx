@@ -1,22 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { FC } from "react";
-import React, { useEffect, useMemo, useState } from "react";
-import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Animated,
+	Dimensions,
 	Image,
-	ScrollView,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
 	View,
 } from "react-native";
 import { ArrowLeft, Heart } from "react-native-feather";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { queryClient } from "@/app/_layout";
 import { SeasonCard } from "@/components/season-card";
 import { ShowDetailSkeleton } from "@/components/show-detail-skeleton";
 import { $api, fetchClient } from "@/lib/api";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const HEADER_HEIGHT = 420;
+const STICKY_HEADER_HEIGHT = 100;
 
 async function fetchAllEpisodesForShow(imdbId: string) {
 	const seasonsResult = await fetchClient.GET("/api/v1/media/getTitleSeasons", {
@@ -79,14 +83,11 @@ async function fetchAllEpisodesForShow(imdbId: string) {
 
 const ShowDetail: FC = () => {
 	const router = useRouter();
+	const insets = useSafeAreaInsets();
 	const { id } = useLocalSearchParams();
 	const imdbId = String(id);
-	const pulseAnim = new Animated.Value(1);
-
-	// Animation values for sticky header
-	const scrollY = new Animated.Value(0);
-	const headerHeight = 340;
-	const maxHeaderHeight = 500;
+	const scrollY = useRef(new Animated.Value(0)).current;
+	const pulseAnim = useRef(new Animated.Value(1)).current;
 
 	const { data: likedData, refetch: refetchLiked } = $api.useQuery(
 		"get",
@@ -137,6 +138,9 @@ const ShowDetail: FC = () => {
 				queryKey: ["get", "/api/v1/progress/all"],
 			});
 			queryClient.invalidateQueries({
+				queryKey: ["get", "/api/v1/progress/tv"],
+			});
+			queryClient.invalidateQueries({
 				queryKey: ["my-shows"],
 			});
 		},
@@ -152,6 +156,9 @@ const ShowDetail: FC = () => {
 					queryKey: ["get", "/api/v1/progress/all"],
 				});
 				queryClient.invalidateQueries({
+					queryKey: ["get", "/api/v1/progress/tv"],
+				});
+				queryClient.invalidateQueries({
 					queryKey: ["my-shows"],
 				});
 			},
@@ -159,25 +166,32 @@ const ShowDetail: FC = () => {
 	);
 
 	const handleMarkAsWatched = async () => {
-		if (isSeries) {
-			const episodes = await fetchAllEpisodesForShow(String(id));
+		try {
+			if (isSeries) {
+				const episodes = await fetchAllEpisodesForShow(String(id));
 
-			if (episodes.length === 0) return;
+				if (episodes.length === 0) {
+					console.warn("No episodes found for show:", id);
+					return;
+				}
 
-			await markAllEpisodesAsWatched({
-				body: {
-					imdbId: String(id),
-					episodes,
-					isWatched: true,
-				},
-			});
-		} else {
-			await markMovieAsWatched({
-				body: {
-					imdbId: String(id),
-					isWatched: true,
-				},
-			});
+				await markAllEpisodesAsWatched({
+					body: {
+						imdbId: String(id),
+						episodes,
+						isWatched: true,
+					},
+				});
+			} else {
+				await markMovieAsWatched({
+					body: {
+						imdbId: String(id),
+						isWatched: true,
+					},
+				});
+			}
+		} catch (error) {
+			console.error("Error marking as watched:", error);
 		}
 	};
 
@@ -186,7 +200,10 @@ const ShowDetail: FC = () => {
 		try {
 			if (isSeries) {
 				const episodes = await fetchAllEpisodesForShow(String(id));
-				if (episodes.length === 0) return;
+				if (episodes.length === 0) {
+					console.warn("No episodes found for show:", id);
+					return;
+				}
 
 				await unmarkAllEpisodesAsWatched({
 					body: {
@@ -203,6 +220,8 @@ const ShowDetail: FC = () => {
 					},
 				});
 			}
+		} catch (error) {
+			console.error("Error removing from watched:", error);
 		} finally {
 			setIsRemovingFromWatched(false);
 		}
@@ -268,6 +287,22 @@ const ShowDetail: FC = () => {
 	const data = details?.title;
 	const isSeries = data?.titleType?.isSeries === true;
 
+	// Fetch TV-specific progress data for accurate season progress bars
+	const { data: tvProgressData } = $api.useQuery(
+		"get",
+		"/api/v1/progress/tv",
+		{
+			params: {
+				query: {
+					imdbId,
+				},
+			},
+		},
+		{
+			enabled: isSeries,
+		},
+	);
+
 	const shouldFetchSeasons =
 		!isLoading && details !== undefined && data?.titleType?.isSeries === true;
 
@@ -292,9 +327,9 @@ const ShowDetail: FC = () => {
 
 	// Get progress for this specific show/movie
 	const showEpisodes = useMemo(() => {
-		if (!allProgressData?.episodes) return [];
-		return allProgressData.episodes.filter((ep) => ep.imdbId === imdbId);
-	}, [allProgressData?.episodes, imdbId]);
+		if (!tvProgressData?.episodes) return [];
+		return tvProgressData.episodes.filter((ep) => ep.imdbId === imdbId);
+	}, [tvProgressData?.episodes, imdbId]);
 
 	const showMovieProgress = useMemo(() => {
 		if (!allProgressData?.movies) return null;
@@ -313,33 +348,36 @@ const ShowDetail: FC = () => {
 			{ progress: number; isWatched: boolean }
 		>();
 
-		// Fetch episode counts for each season to calculate accurate progress
-		// For now, we'll calculate based on episodes we know about
+		// Get total episodes per season from TV progress data
+		const episodesPerSeason =
+			tvProgressData?.tvShowProgress?.episodesPerSeason ?? [];
+
 		for (const seasonEdge of seasonEdges) {
 			const seasonNum = Number.parseInt(seasonEdge.node.season, 10);
 			if (Number.isNaN(seasonNum)) continue;
 
-			const seasonEpisodes = showEpisodes.filter(
-				(ep) => ep.seasonNumber === seasonNum,
-			);
-			const watchedEpisodes = seasonEpisodes.filter((ep) => ep.isWatched);
+			// Get total episodes for this season (array is 0-indexed, seasons are 1-indexed)
+			const totalEpisodesInSeason = episodesPerSeason[seasonNum - 1] ?? 0;
 
-			// Calculate progress: if we have episodes, use them; otherwise 0
-			// Note: This is based on episodes we know about, not total episodes
-			// For accurate progress, we'd need to fetch episode counts per season
+			// Count watched episodes for this season
+			const watchedEpisodesInSeason = showEpisodes.filter(
+				(ep) => ep.seasonNumber === seasonNum && ep.isWatched,
+			).length;
+
+			// Calculate progress using total episodes from the server
 			const progress =
-				seasonEpisodes.length > 0
-					? watchedEpisodes.length / seasonEpisodes.length
+				totalEpisodesInSeason > 0
+					? watchedEpisodesInSeason / totalEpisodesInSeason
 					: 0;
 			const isWatched =
-				seasonEpisodes.length > 0 &&
-				watchedEpisodes.length === seasonEpisodes.length;
+				totalEpisodesInSeason > 0 &&
+				watchedEpisodesInSeason >= totalEpisodesInSeason;
 
 			progressMap.set(seasonNum, { progress, isWatched });
 		}
 
 		return progressMap;
-	}, [isSeries, seasonsTitle, showEpisodes]);
+	}, [isSeries, seasonsTitle, showEpisodes, tvProgressData]);
 
 	const watchedSeasons = useMemo(() => {
 		const watchedSet = new Set<number>();
@@ -381,137 +419,161 @@ const ShowDetail: FC = () => {
 
 	if (isLoading) return <ShowDetailSkeleton router={router} />;
 
-	// Animation values for sticky header effects
-	const imageHeight = scrollY.interpolate({
-		inputRange: [-maxHeaderHeight, 0],
-		outputRange: [maxHeaderHeight, headerHeight],
-		extrapolate: "clamp",
+	// Parallax animations
+	// Image scale - stretches when pulling down
+	const imageScale = scrollY.interpolate({
+		inputRange: [-200, 0],
+		outputRange: [1.5, 1],
+		extrapolateRight: "clamp",
 	});
 
+	// Image translateY - parallax effect (moves at half speed)
 	const imageTranslateY = scrollY.interpolate({
-		inputRange: [0, headerHeight],
-		outputRange: [0, -headerHeight],
+		inputRange: [-200, 0, HEADER_HEIGHT],
+		outputRange: [-100, 0, HEADER_HEIGHT * 0.5],
 		extrapolate: "clamp",
 	});
 
+	// Sticky header opacity
 	const headerOpacity = scrollY.interpolate({
-		inputRange: [0, headerHeight - 50],
+		inputRange: [HEADER_HEIGHT - 150, HEADER_HEIGHT - 50],
 		outputRange: [0, 1],
 		extrapolate: "clamp",
 	});
 
-	const headerTranslateY = scrollY.interpolate({
-		inputRange: [0, headerHeight],
-		outputRange: [0, -headerHeight],
+	// Header background blur intensity simulation
+	const headerBgOpacity = scrollY.interpolate({
+		inputRange: [HEADER_HEIGHT - 150, HEADER_HEIGHT - 50],
+		outputRange: [0, 0.95],
 		extrapolate: "clamp",
 	});
 
-	// Handle scroll events
-	const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-		const offsetY = event.nativeEvent.contentOffset.y;
-		scrollY.setValue(offsetY);
-	};
+	// Back button on image opacity (fade out as we scroll)
+	const imageBackButtonOpacity = scrollY.interpolate({
+		inputRange: [0, HEADER_HEIGHT - 150],
+		outputRange: [1, 0],
+		extrapolate: "clamp",
+	});
 
 	return (
 		<View style={styles.container}>
-			{/* Sticky Header with Title and Back Button */}
+			{/* Parallax Hero Image */}
 			<Animated.View
 				style={[
-					styles.stickyHeader,
+					styles.heroImageContainer,
 					{
-						opacity: headerOpacity,
-						transform: [{ translateY: headerTranslateY }],
-					},
-				]}
-			>
-				<TouchableOpacity
-					style={styles.stickyBackButton}
-					onPress={() => router.back()}
-				>
-					<ArrowLeft stroke="#fff" width={24} height={24} />
-				</TouchableOpacity>
-				<Text style={styles.stickyTitle} numberOfLines={1}>
-					{data?.titleText?.text}
-				</Text>
-				<View style={styles.stickyHeaderSpacer} />
-			</Animated.View>
-
-			{/* Sticky Image Header - Scrolls until it reaches top, then sticks */}
-			<Animated.View
-				style={[
-					styles.stickyImageContainer,
-					{
-						height: imageHeight,
-						transform: [{ translateY: imageTranslateY }],
+						transform: [{ translateY: imageTranslateY }, { scale: imageScale }],
 					},
 				]}
 			>
 				{data?.primaryImage?.url ? (
 					<Image
 						source={{ uri: data.primaryImage.url }}
-						style={styles.stickyImage}
+						style={styles.heroImage}
 						resizeMode="cover"
-						onError={(e) => {
-							console.log("Image load error:", e.nativeEvent.error);
-						}}
 					/>
 				) : (
-					<View style={[styles.stickyImage, styles.placeholderImage]}>
+					<View style={[styles.heroImage, styles.placeholderImage]}>
 						<Text style={styles.placeholderText}>
 							{data?.titleText?.text?.[0] ?? "?"}
 						</Text>
 					</View>
 				)}
+			</Animated.View>
 
-				{/* Back Button Overlay */}
+			{/* Sticky Header */}
+			<Animated.View
+				style={[
+					styles.stickyHeader,
+					{ paddingTop: insets.top },
+					{ opacity: headerOpacity },
+				]}
+			>
+				<Animated.View
+					style={[
+						StyleSheet.absoluteFill,
+						styles.stickyHeaderBg,
+						{ opacity: headerBgOpacity },
+					]}
+				/>
 				<TouchableOpacity
-					style={styles.imageBackButton}
+					style={styles.headerBackButton}
 					onPress={() => router.back()}
 				>
-					<ArrowLeft stroke="#fff" width={28} height={28} />
+					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
+				<Text style={styles.headerTitle} numberOfLines={1}>
+					{data?.titleText?.text}
+				</Text>
+				<View style={styles.headerSpacer} />
+			</Animated.View>
 
-				{/* Action Buttons Overlay */}
-				<View style={styles.imageActionButtons}>
-					<Animated.View style={{ opacity: pulseAnim }}>
-						<TouchableOpacity
-							style={[
-								styles.actionButton,
-								isLiked ? styles.likedButton : styles.likeButton,
-							]}
-							onPress={handleToggleLike}
-							disabled={isTogglingLike}
-						>
-							<Heart
-								stroke="#fff"
-								width={20}
-								height={20}
-								fill={isLiked ? "#fff" : "none"}
-							/>
-							<Text style={styles.actionButtonText}>
-								{isLiked ? "Liked" : "Like"}
-							</Text>
-						</TouchableOpacity>
-					</Animated.View>
-				</View>
+			{/* Floating Back Button (visible when image is shown) */}
+			<Animated.View
+				style={[
+					styles.floatingBackButton,
+					{ top: insets.top + 10 },
+					{ opacity: imageBackButtonOpacity },
+				]}
+			>
+				<TouchableOpacity
+					style={styles.floatingBackButtonInner}
+					onPress={() => router.back()}
+				>
+					<ArrowLeft stroke="#fff" width={24} height={24} />
+				</TouchableOpacity>
 			</Animated.View>
 
 			{/* Scrollable Content */}
-			<ScrollView
+			<Animated.ScrollView
 				style={styles.scrollView}
-				contentContainerStyle={{ paddingBottom: 40 }}
-				onScroll={handleScroll}
+				contentContainerStyle={styles.scrollContent}
+				onScroll={Animated.event(
+					[{ nativeEvent: { contentOffset: { y: scrollY } } }],
+					{ useNativeDriver: true },
+				)}
 				scrollEventThrottle={16}
-				bounces={true}
-				alwaysBounceVertical={true}
 				showsVerticalScrollIndicator={false}
 			>
-				{/* Spacer to push content below sticky image */}
-				<View style={{ height: headerHeight }} />
+				{/* Spacer for hero image */}
+				<View style={{ height: HEADER_HEIGHT - 80 }} />
 
-				{/* Content */}
-				<View style={styles.content}>
-					<Text style={styles.title}>{data?.titleText?.text}</Text>
+				{/* Content Card */}
+				<View style={styles.contentCard}>
+					{/* Title & Like Button Row */}
+					<View style={styles.titleRow}>
+						<Text style={styles.title}>{data?.titleText?.text}</Text>
+						<Animated.View style={{ opacity: pulseAnim }}>
+							<TouchableOpacity
+								style={[styles.likeButton, isLiked && styles.likeButtonActive]}
+								onPress={handleToggleLike}
+								disabled={isTogglingLike}
+							>
+								<Heart
+									stroke={isLiked ? "#fff" : "#b14aed"}
+									width={22}
+									height={22}
+									fill={isLiked ? "#fff" : "none"}
+								/>
+							</TouchableOpacity>
+						</Animated.View>
+					</View>
+
+					{/* Meta Info */}
+					<View style={styles.metaRow}>
+						{data?.releaseYear && (
+							<Text style={styles.year}>
+								{data.releaseYear.year}
+								{data.releaseYear.endYear
+									? ` - ${data.releaseYear.endYear}`
+									: ""}
+							</Text>
+						)}
+						{isSeries && <View style={styles.metaDot} />}
+						{isSeries && <Text style={styles.metaText}>TV Series</Text>}
+					</View>
+
+					{/* Genres */}
 					<View style={styles.genresRow}>
 						{data?.titleType?.categories?.map((cat) => (
 							<View key={cat.id} style={styles.genreTag}>
@@ -519,24 +581,27 @@ const ShowDetail: FC = () => {
 							</View>
 						))}
 					</View>
-					{data?.releaseYear && (
-						<Text style={styles.rating}>
-							{data.releaseYear.year}
-							{data.releaseYear.endYear ? ` - ${data.releaseYear.endYear}` : ""}
-						</Text>
-					)}
+
+					{/* Description */}
 					{plot?.plotText?.plainText && (
 						<Text style={styles.description}>{plot.plotText.plainText}</Text>
 					)}
+
+					{/* Action Button */}
 					{!isLoading &&
 						!isProgressLoading &&
 						(watched ? (
 							<TouchableOpacity
-								style={[styles.markWatchedButton, styles.removeWatchedButton]}
-								onPress={handleRemoveFromWatched}
+								style={[
+									styles.actionButton,
+									styles.removeButton,
+									isRemovingFromWatched && styles.actionButtonDisabled,
+								]}
+								onPress={() => void handleRemoveFromWatched()}
 								disabled={isRemovingFromWatched}
+								activeOpacity={0.7}
 							>
-								<Text style={styles.markWatchedButtonText}>
+								<Text style={styles.actionButtonText}>
 									{isRemovingFromWatched
 										? "Removing..."
 										: "Remove from Watched"}
@@ -544,11 +609,15 @@ const ShowDetail: FC = () => {
 							</TouchableOpacity>
 						) : (
 							<TouchableOpacity
-								style={styles.markWatchedButton}
-								onPress={handleMarkAsWatched}
+								style={[
+									styles.actionButton,
+									isMarkingAsWatched && styles.actionButtonDisabled,
+								]}
+								onPress={() => void handleMarkAsWatched()}
 								disabled={isMarkingAsWatched}
+								activeOpacity={0.7}
 							>
-								<Text style={styles.markWatchedButtonText}>
+								<Text style={styles.actionButtonText}>
 									{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
 								</Text>
 							</TouchableOpacity>
@@ -560,10 +629,10 @@ const ShowDetail: FC = () => {
 						seasonsTitle.episodes.displayableSeasons.edges.length > 0 && (
 							<View style={styles.section}>
 								<Text style={styles.sectionTitle}>Seasons</Text>
-								<ScrollView
+								<Animated.ScrollView
 									horizontal
 									showsHorizontalScrollIndicator={false}
-									style={styles.seasonsScroll}
+									contentContainerStyle={styles.horizontalScroll}
 								>
 									{seasonsTitle.episodes.displayableSeasons.edges.map(
 										(seasonEdge) => {
@@ -585,7 +654,7 @@ const ShowDetail: FC = () => {
 											);
 										},
 									)}
-								</ScrollView>
+								</Animated.ScrollView>
 							</View>
 						)}
 
@@ -594,10 +663,10 @@ const ShowDetail: FC = () => {
 						castTitle.principalCredits.length > 0 && (
 							<View style={styles.section}>
 								<Text style={styles.sectionTitle}>Cast</Text>
-								<ScrollView
+								<Animated.ScrollView
 									horizontal
 									showsHorizontalScrollIndicator={false}
-									style={styles.castScroll}
+									contentContainerStyle={styles.horizontalScroll}
 								>
 									{castTitle.principalCredits
 										.flatMap((creditGroup) => creditGroup.credits)
@@ -633,11 +702,13 @@ const ShowDetail: FC = () => {
 												)}
 											</View>
 										))}
-								</ScrollView>
+								</Animated.ScrollView>
 							</View>
 						)}
 				</View>
-			</ScrollView>
+
+				<View style={{ height: 50 }} />
+			</Animated.ScrollView>
 		</View>
 	);
 };
@@ -650,241 +721,217 @@ const styles = StyleSheet.create({
 	scrollView: {
 		flex: 1,
 	},
-	// Sticky Header Styles
+	scrollContent: {
+		minHeight: "100%",
+	},
+	// Hero Image
+	heroImageContainer: {
+		position: "absolute",
+		top: 0,
+		left: 0,
+		right: 0,
+		height: HEADER_HEIGHT,
+		zIndex: 0,
+	},
+	heroImage: {
+		width: SCREEN_WIDTH,
+		height: HEADER_HEIGHT + 100,
+		backgroundColor: "#111",
+	},
+	placeholderImage: {
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	placeholderText: {
+		color: "#333",
+		fontSize: 72,
+		fontWeight: "bold",
+	},
+	// Sticky Header
 	stickyHeader: {
 		position: "absolute",
 		top: 0,
 		left: 0,
 		right: 0,
-		height: 100,
-		backgroundColor: "rgba(0,0,0,0.9)",
-		flexDirection: "row",
-		alignItems: "center",
-		paddingHorizontal: 20,
-		paddingTop: 40,
-		zIndex: 10,
-	},
-	stickyBackButton: {
-		backgroundColor: "rgba(0,0,0,0.6)",
-		borderRadius: 20,
-		padding: 8,
-		marginRight: 16,
-	},
-	stickyTitle: {
-		color: "#fff",
-		fontSize: 18,
-		fontWeight: "bold",
-		flex: 1,
-	},
-	stickyHeaderSpacer: {
-		width: 40, // Same width as back button to center title
-	},
-	// Sticky Image Container - Scrolls until it reaches top, then sticks
-	stickyImageContainer: {
-		position: "absolute",
-		top: 0,
-		left: 0,
-		right: 0,
-		width: "100%",
-		overflow: "visible",
-		zIndex: 1,
-	},
-	stickyImage: {
-		width: "100%",
-		height: "100%",
-		resizeMode: "cover",
-	},
-	imageBackButton: {
-		position: "absolute",
-		top: 40,
-		left: 20,
-		zIndex: 2,
-		backgroundColor: "rgba(0,0,0,0.6)",
-		borderRadius: 20,
-		padding: 6,
-	},
-	imageActionButtons: {
-		position: "absolute",
-		right: 20,
-		bottom: -15,
-		zIndex: 2,
-		flexDirection: "row",
-		gap: 4,
-	},
-	// Legacy styles for backward compatibility
-	header: {
-		position: "relative",
-		width: "100%",
-		height: 340,
-		backgroundColor: "#111",
-		marginBottom: -40,
-	},
-	backButton: {
-		position: "absolute",
-		top: 40,
-		left: 20,
-		zIndex: 2,
-		backgroundColor: "rgba(0,0,0,0.6)",
-		borderRadius: 20,
-		padding: 6,
-	},
-	poster: {
-		width: "100%",
-		height: 340,
-		resizeMode: "cover",
-	},
-	content: {
-		paddingHorizontal: 24,
-		marginTop: 0,
-	},
-	titleRow: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		alignItems: "center",
-		marginBottom: 10,
-	},
-	title: {
-		color: "#fff",
-		fontSize: 32,
-		fontWeight: "bold",
-		flex: 1,
-		marginRight: 16,
-	},
-	actionButtons: {
-		position: "absolute",
-		right: 20,
-		bottom: -20,
-		zIndex: 2,
-		flexDirection: "row",
-		gap: 4,
-	},
-	actionButton: {
+		height: STICKY_HEADER_HEIGHT,
 		flexDirection: "row",
 		alignItems: "center",
 		paddingHorizontal: 16,
-		paddingVertical: 8,
+		zIndex: 20,
+	},
+	stickyHeaderBg: {
+		backgroundColor: "#0a0a0a",
+	},
+	headerBackButton: {
+		width: 40,
+		height: 40,
 		borderRadius: 20,
-		shadowColor: "#000",
-		shadowOffset: {
-			width: 0,
-			height: 2,
-		},
-		shadowOpacity: 0.25,
-		shadowRadius: 3.84,
-		elevation: 5,
+		backgroundColor: "rgba(255,255,255,0.1)",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	headerTitle: {
+		flex: 1,
+		color: "#fff",
+		fontSize: 18,
+		fontWeight: "700",
+		marginLeft: 12,
+	},
+	headerSpacer: {
+		width: 40,
+	},
+	// Floating Back Button
+	floatingBackButton: {
+		position: "absolute",
+		left: 16,
+		zIndex: 15,
+	},
+	floatingBackButtonInner: {
+		width: 44,
+		height: 44,
+		borderRadius: 22,
+		backgroundColor: "rgba(0,0,0,0.5)",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	// Content
+	contentCard: {
+		backgroundColor: "#000",
+		borderTopLeftRadius: 24,
+		borderTopRightRadius: 24,
+		marginTop: -24,
+		paddingHorizontal: 20,
+		paddingTop: 24,
+		zIndex: 10,
+	},
+	titleRow: {
+		flexDirection: "row",
+		alignItems: "flex-start",
+		justifyContent: "space-between",
+		marginBottom: 12,
+	},
+	title: {
+		flex: 1,
+		color: "#fff",
+		fontSize: 28,
+		fontWeight: "800",
+		lineHeight: 34,
+		marginRight: 12,
 	},
 	likeButton: {
-		backgroundColor: "#3c3c3c",
+		width: 48,
+		height: 48,
+		borderRadius: 24,
+		backgroundColor: "rgba(177,74,237,0.15)",
+		justifyContent: "center",
+		alignItems: "center",
+		borderWidth: 2,
+		borderColor: "#b14aed",
 	},
-	likedButton: {
+	likeButtonActive: {
 		backgroundColor: "#b14aed",
+		borderColor: "#b14aed",
 	},
-	disabledButton: {
-		opacity: 1,
+	metaRow: {
+		flexDirection: "row",
+		alignItems: "center",
+		marginBottom: 12,
 	},
-	watchedButton: {
+	year: {
+		color: "#888",
+		fontSize: 15,
+		fontWeight: "500",
+	},
+	metaDot: {
+		width: 4,
+		height: 4,
+		borderRadius: 2,
+		backgroundColor: "#555",
+		marginHorizontal: 10,
+	},
+	metaText: {
+		color: "#888",
+		fontSize: 15,
+		fontWeight: "500",
+	},
+	genresRow: {
+		flexDirection: "row",
+		flexWrap: "wrap",
+		marginBottom: 16,
+		gap: 8,
+	},
+	genreTag: {
+		backgroundColor: "#1a1a1a",
+		borderRadius: 8,
+		paddingHorizontal: 12,
+		paddingVertical: 6,
+	},
+	genreText: {
+		color: "#b14aed",
+		fontSize: 13,
+		fontWeight: "600",
+	},
+	description: {
+		color: "#aaa",
+		fontSize: 15,
+		lineHeight: 24,
+		marginBottom: 20,
+	},
+	actionButton: {
 		backgroundColor: "#b14aed",
+		borderRadius: 12,
+		paddingVertical: 14,
+		alignItems: "center",
+		marginBottom: 24,
+	},
+	actionButtonDisabled: {
+		opacity: 0.6,
+	},
+	removeButton: {
+		backgroundColor: "#dc2626",
 	},
 	actionButtonText: {
 		color: "#fff",
 		fontSize: 16,
-		fontWeight: "600",
-		marginLeft: 4,
+		fontWeight: "700",
 	},
-	genresRow: {
-		flexDirection: "row",
-		marginBottom: 10,
-		flexWrap: "wrap",
-	},
-	genreTag: {
-		backgroundColor: "#222",
-		borderRadius: 8,
-		paddingHorizontal: 10,
-		paddingVertical: 4,
-		marginRight: 8,
-		marginBottom: 6,
-	},
-	genreText: {
-		color: "#b14aed",
-		fontSize: 14,
-		fontWeight: "600",
-	},
-	rating: {
-		color: "#fff",
-		fontSize: 16,
-		marginBottom: 16,
-	},
-	description: {
-		color: "#ccc",
-		fontSize: 16,
-		marginBottom: 24,
-	},
+	// Sections
 	section: {
-		marginTop: 10,
+		marginBottom: 24,
 	},
 	sectionTitle: {
 		color: "#fff",
 		fontSize: 20,
-		fontWeight: "bold",
-		marginBottom: 10,
+		fontWeight: "700",
+		marginBottom: 14,
 	},
-	markWatchedButton: {
-		backgroundColor: "#3c3c3c",
-		flexDirection: "row",
-		alignItems: "center",
-		justifyContent: "center",
-		paddingVertical: 12,
-		borderRadius: 10,
-		marginBottom: 24,
+	horizontalScroll: {
+		paddingRight: 20,
 	},
-	markWatchedButtonText: {
-		color: "#fff",
-		fontSize: 16,
-		fontWeight: "600",
-		marginLeft: 8,
-	},
-	removeWatchedButton: {
-		backgroundColor: "#ff4444",
-	},
-	placeholderImage: {
-		backgroundColor: "#222",
-		justifyContent: "center",
-		alignItems: "center",
-	},
-	placeholderText: {
-		color: "#666",
-		fontSize: 48,
-		fontWeight: "bold",
-	},
-	castScroll: {
-		marginLeft: -10,
-	},
+	// Cast
 	castItem: {
-		width: 100,
-		marginRight: 15,
+		width: 90,
+		marginRight: 14,
 		alignItems: "center",
 	},
 	castImage: {
-		width: 100,
-		height: 100,
-		borderRadius: 50,
-		backgroundColor: "#222",
+		width: 80,
+		height: 80,
+		borderRadius: 40,
+		backgroundColor: "#1a1a1a",
 		marginBottom: 8,
 	},
 	castName: {
 		color: "#fff",
-		fontSize: 14,
+		fontSize: 13,
 		fontWeight: "600",
 		textAlign: "center",
-		marginBottom: 4,
+		marginBottom: 2,
 	},
 	castCharacter: {
-		color: "#999",
-		fontSize: 12,
+		color: "#666",
+		fontSize: 11,
 		textAlign: "center",
-	},
-	seasonsScroll: {
-		marginLeft: -10,
 	},
 });
 

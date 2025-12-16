@@ -33,11 +33,30 @@ const useDebouncedValue = <T,>(value: T, delay: number): T => {
 	return debouncedValue;
 };
 
+type TvShowProgress = {
+	imdbId: string;
+	title: string | null;
+	posterUrl: string | null;
+	watchedEpisodes: number;
+	totalEpisodes: number;
+	totalSeasons: number | null;
+	lastWatchedSeason: number | null;
+	lastWatchedEpisode: number | null;
+	isFullyWatched: boolean;
+};
+
+type MovieProgress = {
+	imdbId: string;
+	isWatched: boolean;
+};
+
 // Animated search result item component
 const AnimatedSearchResult = ({
 	item,
 	index,
 	onPress,
+	tvProgress,
+	movieProgress,
 }: {
 	item: {
 		id: string;
@@ -51,6 +70,8 @@ const AnimatedSearchResult = ({
 	};
 	index: number;
 	onPress: () => void;
+	tvProgress?: TvShowProgress | null;
+	movieProgress?: MovieProgress | null;
 }) => {
 	const fadeAnim = useRef(new Animated.Value(0)).current;
 	const slideAnim = useRef(new Animated.Value(20)).current;
@@ -80,6 +101,20 @@ const AnimatedSearchResult = ({
 		? `https://image.tmdb.org/t/p/w500${item.poster_path}`
 		: null;
 
+	// Progress info
+	const hasProgress =
+		item.media_type === "tv"
+			? tvProgress && tvProgress.watchedEpisodes > 0
+			: movieProgress?.isWatched;
+	const isCompleted =
+		item.media_type === "tv"
+			? tvProgress?.isFullyWatched
+			: movieProgress?.isWatched;
+	const progressPercent =
+		tvProgress && tvProgress.totalEpisodes > 0
+			? tvProgress.watchedEpisodes / tvProgress.totalEpisodes
+			: 0;
+
 	return (
 		<Animated.View
 			style={{
@@ -93,7 +128,20 @@ const AnimatedSearchResult = ({
 				activeOpacity={0.7}
 			>
 				{posterUrl ? (
-					<Image source={{ uri: posterUrl }} style={styles.searchResultImage} />
+					<View style={styles.posterContainer}>
+						<Image
+							source={{ uri: posterUrl }}
+							style={[
+								styles.searchResultImage,
+								isCompleted && styles.imageWatched,
+							]}
+						/>
+						{isCompleted && (
+							<View style={styles.completedBadge}>
+								<Text style={styles.completedBadgeText}>✓</Text>
+							</View>
+						)}
+					</View>
 				) : (
 					<View style={[styles.searchResultImage, styles.posterPlaceholder]}>
 						<Search stroke="#444" width={24} height={24} />
@@ -111,7 +159,43 @@ const AnimatedSearchResult = ({
 							</Text>
 						</View>
 					</View>
-					{item.vote_average > 0 && (
+
+					{/* Progress info for TV shows */}
+					{item.media_type === "tv" && tvProgress && hasProgress && (
+						<View style={styles.progressInfoContainer}>
+							<Text style={styles.episodeInfo}>
+								{tvProgress.watchedEpisodes}/{tvProgress.totalEpisodes} episodes
+							</Text>
+							{!tvProgress.isFullyWatched &&
+								tvProgress.lastWatchedSeason !== null &&
+								tvProgress.lastWatchedEpisode !== null && (
+									<Text style={styles.lastWatchedInfo}>
+										S{tvProgress.lastWatchedSeason} E
+										{tvProgress.lastWatchedEpisode}
+									</Text>
+								)}
+							{!tvProgress.isFullyWatched && (
+								<View style={styles.progressBarContainer}>
+									<View
+										style={[
+											styles.progressBar,
+											{ width: `${Math.min(progressPercent * 100, 100)}%` },
+										]}
+									/>
+								</View>
+							)}
+						</View>
+					)}
+
+					{/* Watched status for movies */}
+					{item.media_type === "movie" && movieProgress?.isWatched && (
+						<View style={styles.progressInfoContainer}>
+							<Text style={styles.watchedStatus}>Watched</Text>
+						</View>
+					)}
+
+					{/* Rating (only show if no progress info) */}
+					{!hasProgress && item.vote_average > 0 && (
 						<View style={styles.ratingContainer}>
 							<Text style={styles.ratingText}>
 								★ {item.vote_average.toFixed(1)}
@@ -221,6 +305,30 @@ const App = () => {
 		},
 	);
 
+	// Fetch progress data
+	const { data: progressData } = $api.useQuery("get", "/api/v1/progress/all");
+
+	// Create lookup maps for progress
+	const tvProgressMap = useMemo(() => {
+		const map = new Map<string, TvShowProgress>();
+		if (progressData?.tvShows) {
+			for (const show of progressData.tvShows as TvShowProgress[]) {
+				map.set(show.imdbId, show);
+			}
+		}
+		return map;
+	}, [progressData?.tvShows]);
+
+	const movieProgressMap = useMemo(() => {
+		const map = new Map<string, MovieProgress>();
+		if (progressData?.movies) {
+			for (const movie of progressData.movies as MovieProgress[]) {
+				map.set(movie.imdbId, movie);
+			}
+		}
+		return map;
+	}, [progressData?.movies]);
+
 	const sortedSearchResults = useMemo(() => {
 		if (!searchResults?.results || !debouncedSearchQuery.trim())
 			return searchResults?.results;
@@ -321,6 +429,8 @@ const App = () => {
 											params: { id: item.id },
 										})
 									}
+									tvProgress={tvProgressMap.get(item.id)}
+									movieProgress={movieProgressMap.get(item.id)}
 								/>
 							))}
 					</View>
@@ -401,10 +511,32 @@ const styles = StyleSheet.create({
 		marginBottom: 12,
 		overflow: "hidden",
 	},
+	posterContainer: {
+		position: "relative",
+	},
 	searchResultImage: {
 		width: 85,
 		height: 128,
 		backgroundColor: "#1a1a1a",
+	},
+	imageWatched: {
+		opacity: 0.7,
+	},
+	completedBadge: {
+		position: "absolute",
+		top: 6,
+		right: 6,
+		width: 20,
+		height: 20,
+		borderRadius: 10,
+		backgroundColor: "#b14aed",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	completedBadgeText: {
+		color: "#fff",
+		fontSize: 10,
+		fontWeight: "bold",
 	},
 	posterPlaceholder: {
 		justifyContent: "center",
@@ -442,6 +574,37 @@ const styles = StyleSheet.create({
 		fontSize: 11,
 		fontWeight: "600",
 		textTransform: "uppercase",
+	},
+	progressInfoContainer: {
+		marginTop: 8,
+	},
+	episodeInfo: {
+		color: "#888",
+		fontSize: 12,
+	},
+	lastWatchedInfo: {
+		color: "#b14aed",
+		fontSize: 12,
+		fontWeight: "600",
+		marginTop: 2,
+	},
+	progressBarContainer: {
+		width: "100%",
+		height: 3,
+		backgroundColor: "rgba(255,255,255,0.15)",
+		borderRadius: 1.5,
+		marginTop: 6,
+		overflow: "hidden",
+	},
+	progressBar: {
+		height: "100%",
+		backgroundColor: "#b14aed",
+		borderRadius: 1.5,
+	},
+	watchedStatus: {
+		color: "#b14aed",
+		fontSize: 12,
+		fontWeight: "600",
 	},
 	ratingContainer: {
 		marginTop: 8,

@@ -4,19 +4,154 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Animated,
+	Image,
 	Pressable,
 	ScrollView,
 	StatusBar,
 	StyleSheet,
 	Text,
+	TouchableOpacity,
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MediaItem } from "@/components/media-item";
 import { $api, fetchClient } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 
 const HEADER_HEIGHT = 60;
+const CARD_WIDTH = 120;
+const CARD_IMAGE_HEIGHT = 180;
+
+type TvShowProgress = {
+	imdbId: string;
+	title: string | null;
+	posterUrl: string | null;
+	watchedEpisodes: number;
+	totalEpisodes: number;
+	totalSeasons: number | null;
+	lastWatchedSeason: number | null;
+	lastWatchedEpisode: number | null;
+	isFullyWatched: boolean;
+};
+
+type MovieProgress = {
+	imdbId: string;
+	isWatched: boolean;
+};
+
+// Media card with optional progress info for TV shows
+const TvMediaCard = ({
+	title,
+	imageUrl,
+	onPress,
+	progress,
+}: {
+	title: string;
+	imageUrl: string;
+	onPress: () => void;
+	progress?: TvShowProgress | null;
+}) => {
+	const hasProgress = progress && progress.watchedEpisodes > 0;
+	const progressPercent =
+		progress && progress.totalEpisodes > 0
+			? progress.watchedEpisodes / progress.totalEpisodes
+			: 0;
+
+	return (
+		<TouchableOpacity
+			onPress={onPress}
+			activeOpacity={0.8}
+			style={styles.mediaCard}
+		>
+			{/* Poster */}
+			<Image
+				source={{ uri: imageUrl }}
+				style={[
+					styles.mediaCardImage,
+					progress?.isFullyWatched && styles.imageWatched,
+				]}
+			/>
+
+			{/* Progress bar (only for in-progress shows) */}
+			{hasProgress && !progress.isFullyWatched && (
+				<View style={styles.progressBarContainer}>
+					<View
+						style={[
+							styles.progressBar,
+							{ width: `${Math.min(progressPercent * 100, 100)}%` },
+						]}
+					/>
+				</View>
+			)}
+
+			{/* Completed badge */}
+			{progress?.isFullyWatched && (
+				<View style={styles.completedBadge}>
+					<Text style={styles.completedBadgeText}>✓</Text>
+				</View>
+			)}
+
+			{/* Title */}
+			<Text style={styles.mediaCardTitle} numberOfLines={2}>
+				{title}
+			</Text>
+
+			{/* Episode info (only if has progress) */}
+			{hasProgress && (
+				<Text style={styles.episodeInfo}>
+					{progress.watchedEpisodes}/{progress.totalEpisodes} episodes
+				</Text>
+			)}
+
+			{/* Last watched (only for in-progress shows) */}
+			{hasProgress &&
+				!progress.isFullyWatched &&
+				progress.lastWatchedSeason !== null &&
+				progress.lastWatchedEpisode !== null && (
+					<Text style={styles.lastWatchedInfo}>
+						S{progress.lastWatchedSeason} E{progress.lastWatchedEpisode}
+					</Text>
+				)}
+		</TouchableOpacity>
+	);
+};
+
+// Movie card with watched status
+const MovieMediaCard = ({
+	title,
+	imageUrl,
+	onPress,
+	isWatched,
+}: {
+	title: string;
+	imageUrl: string;
+	onPress: () => void;
+	isWatched?: boolean;
+}) => {
+	return (
+		<TouchableOpacity
+			onPress={onPress}
+			activeOpacity={0.8}
+			style={styles.mediaCard}
+		>
+			<Image
+				source={{ uri: imageUrl }}
+				style={[styles.mediaCardImage, isWatched && styles.imageWatched]}
+			/>
+
+			{isWatched && (
+				<View style={styles.completedBadge}>
+					<Text style={styles.completedBadgeText}>✓</Text>
+				</View>
+			)}
+
+			<Text style={styles.mediaCardTitle} numberOfLines={2}>
+				{title}
+			</Text>
+
+			{isWatched && <Text style={styles.episodeInfo}>Watched</Text>}
+		</TouchableOpacity>
+	);
+};
 
 const Index = () => {
 	const router = useRouter();
@@ -35,6 +170,33 @@ const Index = () => {
 		error: likesError,
 		refetch: refetchLikes,
 	} = $api.useQuery("get", "/api/v1/likes/list");
+
+	// Fetch progress data
+	const {
+		data: progressData,
+		refetch: refetchProgress,
+	} = $api.useQuery("get", "/api/v1/progress/all");
+
+	// Create lookup maps for progress
+	const tvProgressMap = useMemo(() => {
+		const map = new Map<string, TvShowProgress>();
+		if (progressData?.tvShows) {
+			for (const show of progressData.tvShows as TvShowProgress[]) {
+				map.set(show.imdbId, show);
+			}
+		}
+		return map;
+	}, [progressData?.tvShows]);
+
+	const movieProgressMap = useMemo(() => {
+		const map = new Map<string, MovieProgress>();
+		if (progressData?.movies) {
+			for (const movie of progressData.movies as MovieProgress[]) {
+				map.set(movie.imdbId, movie);
+			}
+		}
+		return map;
+	}, [progressData?.movies]);
 
 	const likes = likesData?.likes ?? [];
 
@@ -124,7 +286,8 @@ const Index = () => {
 	useFocusEffect(
 		useCallback(() => {
 			void refetchLikes();
-		}, [refetchLikes]),
+			void refetchProgress();
+		}, [refetchLikes, refetchProgress]),
 	);
 
 	if (!isAuthReady) {
@@ -167,6 +330,7 @@ const Index = () => {
 						horizontal
 						showsHorizontalScrollIndicator={false}
 						style={styles.mediaScroll}
+						contentContainerStyle={styles.mediaScrollContent}
 					>
 						{isMyShowsLoading && (
 							<Text style={styles.loadingText}>Loading...</Text>
@@ -197,9 +361,10 @@ const Index = () => {
 								"https://via.placeholder.com/150x225/333/fff",
 							);
 							placeholder.searchParams.set("text", title);
+							const tvProgress = tvProgressMap.get(item.like.imdbId);
 
 							return (
-								<MediaItem
+								<TvMediaCard
 									key={`${item.like.id}-${i}`}
 									title={title}
 									imageUrl={imageUrl ?? placeholder.toString()}
@@ -209,6 +374,7 @@ const Index = () => {
 											params: { id: item.like.imdbId },
 										})
 									}
+									progress={tvProgress}
 								/>
 							);
 						})}
@@ -223,6 +389,7 @@ const Index = () => {
 						horizontal
 						showsHorizontalScrollIndicator={false}
 						style={styles.mediaScroll}
+						contentContainerStyle={styles.mediaScrollContent}
 					>
 						{isMyMoviesLoading && (
 							<Text style={styles.loadingText}>Loading...</Text>
@@ -253,9 +420,10 @@ const Index = () => {
 								"https://via.placeholder.com/150x225/333/fff",
 							);
 							placeholder.searchParams.set("text", title);
+							const movieProgress = movieProgressMap.get(item.like.imdbId);
 
 							return (
-								<MediaItem
+								<MovieMediaCard
 									key={`${item.like.id}-${i}`}
 									title={title}
 									imageUrl={imageUrl ?? placeholder.toString()}
@@ -265,6 +433,7 @@ const Index = () => {
 											params: { id: item.like.imdbId },
 										})
 									}
+									isWatched={movieProgress?.isWatched}
 								/>
 							);
 						})}
@@ -285,22 +454,26 @@ const styles = StyleSheet.create({
 		flex: 1,
 	},
 	section: {
-		marginTop: 30,
-		paddingHorizontal: 20,
+		marginTop: 24,
+		paddingHorizontal: 16,
 	},
 	sectionLabel: {
 		color: "#666",
-		fontSize: 14,
-		fontWeight: "500",
+		fontSize: 12,
+		fontWeight: "600",
+		letterSpacing: 1,
 	},
 	sectionTitle: {
 		color: "#fff",
-		fontSize: 28,
-		fontWeight: "bold",
-		marginBottom: 15,
+		fontSize: 24,
+		fontWeight: "700",
+		marginBottom: 14,
 	},
 	mediaScroll: {
-		marginLeft: -10,
+		marginLeft: -4,
+	},
+	mediaScrollContent: {
+		paddingRight: 16,
 	},
 	loadingText: {
 		color: "#fff",
@@ -335,6 +508,67 @@ const styles = StyleSheet.create({
 		color: "#ff4444",
 		fontSize: 16,
 		textAlign: "center",
+	},
+	// Media Card Styles
+	mediaCard: {
+		width: CARD_WIDTH,
+		marginRight: 12,
+	},
+	mediaCardImage: {
+		width: CARD_WIDTH,
+		height: CARD_IMAGE_HEIGHT,
+		borderRadius: 10,
+		backgroundColor: "#1a1a1a",
+	},
+	imageWatched: {
+		opacity: 0.7,
+	},
+	progressBarContainer: {
+		width: CARD_WIDTH,
+		height: 3,
+		backgroundColor: "rgba(255,255,255,0.15)",
+		borderRadius: 1.5,
+		marginTop: 6,
+		overflow: "hidden",
+	},
+	progressBar: {
+		height: "100%",
+		backgroundColor: "#b14aed",
+		borderRadius: 1.5,
+	},
+	completedBadge: {
+		position: "absolute",
+		top: 8,
+		right: 8,
+		width: 24,
+		height: 24,
+		borderRadius: 12,
+		backgroundColor: "#b14aed",
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	completedBadgeText: {
+		color: "#fff",
+		fontSize: 12,
+		fontWeight: "bold",
+	},
+	mediaCardTitle: {
+		color: "#fff",
+		fontSize: 13,
+		fontWeight: "600",
+		marginTop: 8,
+		lineHeight: 18,
+	},
+	episodeInfo: {
+		color: "#888",
+		fontSize: 11,
+		marginTop: 2,
+	},
+	lastWatchedInfo: {
+		color: "#b14aed",
+		fontSize: 11,
+		fontWeight: "600",
+		marginTop: 2,
 	},
 });
 
