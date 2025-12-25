@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
 	ActivityIndicator,
 	Alert,
@@ -16,6 +16,44 @@ import { ArrowLeft } from "react-native-feather";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { queryClient } from "@/app/_layout";
 import { $api } from "@/lib/api";
+
+// Episode skeleton component
+const EpisodeSkeleton = ({ index }: { index: number }) => {
+	const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+	useEffect(() => {
+		Animated.loop(
+			Animated.sequence([
+				Animated.timing(shimmerAnim, {
+					toValue: 1,
+					duration: 1000,
+					delay: index * 50,
+					useNativeDriver: true,
+				}),
+				Animated.timing(shimmerAnim, {
+					toValue: 0,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+			]),
+		).start();
+	}, [shimmerAnim, index]);
+
+	const opacity = shimmerAnim.interpolate({
+		inputRange: [0, 1],
+		outputRange: [0.3, 0.6],
+	});
+
+	return (
+		<View style={styles.episodeRow}>
+			<Animated.View style={[styles.skeletonCircle, { opacity }]} />
+			<View style={styles.episodeInfo}>
+				<Animated.View style={[styles.skeletonEpisodeNumber, { opacity }]} />
+				<Animated.View style={[styles.skeletonEpisodeTitle, { opacity }]} />
+			</View>
+		</View>
+	);
+};
 
 const SeasonScreen: React.FC = () => {
 	const router = useRouter();
@@ -347,6 +385,7 @@ const SeasonScreen: React.FC = () => {
 				<TouchableOpacity
 					style={styles.backButton}
 					onPress={() => router.back()}
+					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 				>
 					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
@@ -380,7 +419,14 @@ const SeasonScreen: React.FC = () => {
 				<Text style={styles.episodesTitle}>Episodes</Text>
 
 				{isLoading ? (
-					<Text style={styles.loadingText}>Loading episodes…</Text>
+					<>
+						<EpisodeSkeleton index={0} />
+						<EpisodeSkeleton index={1} />
+						<EpisodeSkeleton index={2} />
+						<EpisodeSkeleton index={3} />
+						<EpisodeSkeleton index={4} />
+						<EpisodeSkeleton index={5} />
+					</>
 				) : episodeEdges.length === 0 ? (
 					<Text style={styles.loadingText}>
 						No episodes found for this season.
@@ -468,9 +514,12 @@ const styles = StyleSheet.create({
 		gap: 12,
 	},
 	backButton: {
+		width: 44,
+		height: 44,
 		backgroundColor: "rgba(255,255,255,0.1)",
-		borderRadius: 20,
-		padding: 8,
+		borderRadius: 22,
+		justifyContent: "center",
+		alignItems: "center",
 		marginTop: 4,
 	},
 	seasonThumbnail: {
@@ -529,6 +578,26 @@ const styles = StyleSheet.create({
 		color: "#a1a1aa",
 		fontSize: 14,
 		marginTop: 20,
+	},
+	// Skeleton styles
+	skeletonCircle: {
+		width: 24,
+		height: 24,
+		borderRadius: 12,
+		backgroundColor: "#222",
+	},
+	skeletonEpisodeNumber: {
+		width: 80,
+		height: 16,
+		backgroundColor: "#222",
+		borderRadius: 4,
+		marginBottom: 4,
+	},
+	skeletonEpisodeTitle: {
+		width: 150,
+		height: 14,
+		backgroundColor: "#1a1a1a",
+		borderRadius: 4,
 	},
 	savingContainer: {
 		marginTop: 16,

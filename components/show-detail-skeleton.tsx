@@ -21,8 +21,9 @@ export const ShowDetailSkeleton: React.FC<{
 				<TouchableOpacity
 					style={styles.backButton}
 					onPress={() => router.back()}
+					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 				>
-					<ArrowLeft stroke="#fff" width={28} height={28} />
+					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
 				<View style={[styles.poster, { backgroundColor: "#222" }]} />
 			</View>
@@ -97,11 +98,14 @@ const styles = StyleSheet.create({
 	backButton: {
 		position: "absolute",
 		top: 40,
-		left: 20,
+		left: 16,
 		zIndex: 2,
+		width: 44,
+		height: 44,
 		backgroundColor: "rgba(0,0,0,0.6)",
-		borderRadius: 20,
-		padding: 6,
+		borderRadius: 22,
+		justifyContent: "center",
+		alignItems: "center",
 	},
 	poster: {
 		width: "100%",

@@ -1,6 +1,6 @@
-import { useFocusEffect } from "@react-navigation/native";
+import { useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
 	Animated,
 	Image,
@@ -13,8 +13,7 @@ import {
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { $api } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
+import { $api, fetchClient } from "@/lib/api";
 
 const HEADER_HEIGHT = 60;
 const CARD_WIDTH = 120;
@@ -189,26 +188,74 @@ const ProgressCardSkeleton = () => {
 
 const Index = () => {
 	const router = useRouter();
-	const { data: session, isPending } = authClient.useSession();
-	const [isAuthReady, setIsAuthReady] = useState(false);
-
-	useEffect(() => {
-		if (!isPending) {
-			setIsAuthReady(true);
-		}
-	}, [isPending]);
 
 	const {
 		data: progressData,
 		isLoading: isProgressLoading,
 		error: progressError,
-		refetch: refetchProgress,
-	} = $api.useQuery("get", "/api/v1/progress/all");
+	} = $api.useQuery("get", "/api/v1/progress/all", {
+		staleTime: 1000 * 60 * 2, // Consider data fresh for 2 minutes
+	});
 
 	const movies = (progressData?.movies ?? []) as Movie[];
 	const tvShows = (progressData?.tvShows ?? []) as TvShow[];
 
-	// Categorize items into groups
+	// Get all unique imdbIds that need title details (missing title or posterUrl)
+	const allImdbIds = useMemo(() => {
+		const ids = new Set<string>();
+		tvShows.forEach((show) => {
+			if (!show.title || !show.posterUrl) {
+				ids.add(show.imdbId);
+			}
+		});
+		movies.forEach((movie) => {
+			if (!movie.title || !movie.posterUrl) {
+				ids.add(movie.imdbId);
+			}
+		});
+		return Array.from(ids);
+	}, [tvShows, movies]);
+
+	// Fetch title details for ALL items that need them (React Query handles caching)
+	// Use unique query key "progress-title-details" to avoid conflicts with liked.tsx
+	const detailQueries = useQueries({
+		queries: allImdbIds.map((imdbId) => ({
+			queryKey: ["progress-title-details", imdbId],
+			queryFn: async () => {
+				const result = await fetchClient.GET("/api/v1/media/getTitleDetails", {
+					params: { query: { tt: imdbId } },
+				});
+				const title = result.data?.title?.titleText?.text ?? null;
+				const posterUrl = result.data?.title?.primaryImage?.url ?? null;
+				return { imdbId, title, posterUrl };
+			},
+			enabled: !!imdbId,
+			retry: 2,
+			staleTime: 1000 * 60 * 5, // Consider data stale after 5 minutes
+			gcTime: 1000 * 60 * 30, // Keep in memory for 30 minutes
+			refetchOnMount: "always", // Always refetch when component mounts
+		})),
+	});
+
+	// Create a lookup map from the query results
+	const detailsMap = useMemo(() => {
+		const map = new Map<
+			string,
+			{ title: string | null; posterUrl: string | null }
+		>();
+		for (const query of detailQueries) {
+			if (query.isSuccess && query.data?.imdbId) {
+				map.set(query.data.imdbId, {
+					title: query.data.title,
+					posterUrl: query.data.posterUrl,
+				});
+			}
+		}
+		return map;
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [detailQueries]);
+
+	// Categorize items into groups with enriched data
 	const { progressTvShows, finishedSeries, finishedMovies } = useMemo(() => {
 		const progressTv: TvShow[] = [];
 		const finishedTv: TvShow[] = [];
@@ -216,17 +263,29 @@ const Index = () => {
 
 		// Categorize TV shows
 		tvShows.forEach((show) => {
+			const details = detailsMap.get(show.imdbId);
+			const enrichedShow: TvShow = {
+				...show,
+				title: show.title ?? details?.title ?? null,
+				posterUrl: show.posterUrl ?? details?.posterUrl ?? null,
+			};
+
 			if (show.isFullyWatched) {
-				finishedTv.push(show);
+				finishedTv.push(enrichedShow);
 			} else if (show.watchedEpisodes > 0) {
-				progressTv.push(show);
+				progressTv.push(enrichedShow);
 			}
 		});
 
 		// Categorize movies (only finished movies)
 		movies.forEach((movie) => {
 			if (movie.isWatched) {
-				finishedMov.push(movie);
+				const details = detailsMap.get(movie.imdbId);
+				finishedMov.push({
+					...movie,
+					title: movie.title ?? details?.title ?? null,
+					posterUrl: movie.posterUrl ?? details?.posterUrl ?? null,
+				});
 			}
 		});
 
@@ -235,35 +294,7 @@ const Index = () => {
 			finishedSeries: finishedTv,
 			finishedMovies: finishedMov,
 		};
-	}, [movies, tvShows]);
-
-	useFocusEffect(
-		useCallback(() => {
-			void refetchProgress();
-		}, [refetchProgress]),
-	);
-
-	if (!isAuthReady) {
-		return (
-			<SafeAreaView style={styles.container}>
-				<StatusBar barStyle="light-content" backgroundColor="#000" />
-				<View style={styles.loadingContainer}>
-					<Text style={styles.loadingText}>Loading...</Text>
-				</View>
-			</SafeAreaView>
-		);
-	}
-
-	if (!session?.user) {
-		return (
-			<SafeAreaView style={styles.container}>
-				<StatusBar barStyle="light-content" backgroundColor="#000" />
-				<View style={styles.loadingContainer}>
-					<Text style={styles.loadingText}>Please sign in to continue</Text>
-				</View>
-			</SafeAreaView>
-		);
-	}
+	}, [movies, tvShows, detailsMap]);
 
 	const renderTvShowSection = (
 		label: string,
@@ -555,6 +586,20 @@ const styles = StyleSheet.create({
 		borderRadius: 4,
 		backgroundColor: "#1a1a1a",
 		marginTop: 4,
+	},
+	skeletonLabel: {
+		width: 80,
+		height: 12,
+		backgroundColor: "#1a1a1a",
+		borderRadius: 4,
+		marginBottom: 4,
+	},
+	skeletonSectionTitle: {
+		width: 120,
+		height: 24,
+		backgroundColor: "#1a1a1a",
+		borderRadius: 6,
+		marginBottom: 14,
 	},
 });
 

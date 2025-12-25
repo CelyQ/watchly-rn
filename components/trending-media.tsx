@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
+	Animated,
 	Image,
 	ScrollView,
 	StyleSheet,
@@ -117,6 +118,41 @@ const MediaCard = ({
 					</Text>
 				)}
 		</TouchableOpacity>
+	);
+};
+
+// Skeleton card component for loading state
+const MediaCardSkeleton = () => {
+	const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+	useEffect(() => {
+		Animated.loop(
+			Animated.sequence([
+				Animated.timing(shimmerAnim, {
+					toValue: 1,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+				Animated.timing(shimmerAnim, {
+					toValue: 0,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+			]),
+		).start();
+	}, [shimmerAnim]);
+
+	const opacity = shimmerAnim.interpolate({
+		inputRange: [0, 1],
+		outputRange: [0.3, 0.6],
+	});
+
+	return (
+		<View style={styles.mediaCard}>
+			<Animated.View style={[styles.skeletonImage, { opacity }]} />
+			<Animated.View style={[styles.skeletonTitle, { opacity }]} />
+			<Animated.View style={[styles.skeletonSubtitle, { opacity }]} />
+		</View>
 	);
 };
 
@@ -245,8 +281,7 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 					const scrollPosition = contentOffset.x;
 					const scrollWidth = contentSize.width;
 					const containerWidth = layoutMeasurement.width;
-					const distanceFromEnd =
-						scrollWidth - scrollPosition - containerWidth;
+					const distanceFromEnd = scrollWidth - scrollPosition - containerWidth;
 
 					const threshold = containerWidth * 2;
 					if (
@@ -259,7 +294,13 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 				}}
 				scrollEventThrottle={16}
 			>
-				{isLoading && <Text style={styles.loadingText}>Loading...</Text>}
+				{isLoading && (
+					<>
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+					</>
+				)}
 				{isError && (
 					<Text style={styles.loadingText}>
 						Error loading trending {mediaType === "tv" ? "shows" : "movies"}
@@ -315,11 +356,7 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 						/>
 					);
 				})}
-				{isFetchingNextPage && (
-					<View style={styles.loadingMoreContainer}>
-						<Text style={styles.loadingText}>Loading more...</Text>
-					</View>
-				)}
+				{isFetchingNextPage && <MediaCardSkeleton />}
 			</ScrollView>
 		</View>
 	);
@@ -353,12 +390,26 @@ const styles = StyleSheet.create({
 		fontSize: 16,
 		fontWeight: "500",
 	},
-	loadingMoreContainer: {
+	// Skeleton Styles
+	skeletonImage: {
 		width: CARD_WIDTH,
 		height: CARD_IMAGE_HEIGHT,
-		justifyContent: "center",
-		alignItems: "center",
-		marginRight: 12,
+		borderRadius: 10,
+		backgroundColor: "#1a1a1a",
+	},
+	skeletonTitle: {
+		height: 14,
+		width: CARD_WIDTH * 0.8,
+		borderRadius: 4,
+		backgroundColor: "#1a1a1a",
+		marginTop: 8,
+	},
+	skeletonSubtitle: {
+		height: 10,
+		width: CARD_WIDTH * 0.5,
+		borderRadius: 4,
+		backgroundColor: "#1a1a1a",
+		marginTop: 4,
 	},
 	// Media Card Styles
 	mediaCard: {

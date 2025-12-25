@@ -499,6 +499,7 @@ const ShowDetail: FC = () => {
 				<TouchableOpacity
 					style={styles.headerBackButton}
 					onPress={() => router.back()}
+					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 				>
 					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
@@ -519,6 +520,7 @@ const ShowDetail: FC = () => {
 				<TouchableOpacity
 					style={styles.floatingBackButtonInner}
 					onPress={() => router.back()}
+					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 				>
 					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
@@ -548,6 +550,7 @@ const ShowDetail: FC = () => {
 								style={[styles.likeButton, isLiked && styles.likeButtonActive]}
 								onPress={handleToggleLike}
 								disabled={isTogglingLike}
+								hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 							>
 								<Heart
 									stroke={isLiked ? "#fff" : "#b14aed"}
@@ -763,9 +766,9 @@ const styles = StyleSheet.create({
 		backgroundColor: "#0a0a0a",
 	},
 	headerBackButton: {
-		width: 40,
-		height: 40,
-		borderRadius: 20,
+		width: 44,
+		height: 44,
+		borderRadius: 22,
 		backgroundColor: "rgba(255,255,255,0.1)",
 		justifyContent: "center",
 		alignItems: "center",
@@ -778,7 +781,7 @@ const styles = StyleSheet.create({
 		marginLeft: 12,
 	},
 	headerSpacer: {
-		width: 40,
+		width: 44,
 	},
 	// Floating Back Button
 	floatingBackButton: {

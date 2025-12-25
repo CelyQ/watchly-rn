@@ -1,6 +1,20 @@
+import { Redirect } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
+import { authClient } from "@/lib/auth-client";
 
 export default function TabLayout() {
+	const { data: session, isPending } = authClient.useSession();
+
+	// While checking auth state, show nothing (root layout shows loading)
+	if (isPending) {
+		return null;
+	}
+
+	// If not authenticated, redirect to sign-in
+	if (!session?.user) {
+		return <Redirect href="/sign-in" />;
+	}
+
 	return (
 		<NativeTabs>
 			<NativeTabs.Trigger name="index">

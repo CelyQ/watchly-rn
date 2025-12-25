@@ -1,7 +1,9 @@
+import { BebasNeue_400Regular, useFonts } from "@expo-google-fonts/bebas-neue";
 import { Redirect } from "expo-router";
-import React, { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	Alert,
+	Animated,
 	Image,
 	Platform,
 	StyleSheet,
@@ -9,20 +11,63 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { authClient } from "@/lib/auth-client";
+
+// Loading skeleton component
+const SignInSkeleton = ({ topInset }: { topInset: number }) => {
+	const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+	useEffect(() => {
+		Animated.loop(
+			Animated.sequence([
+				Animated.timing(shimmerAnim, {
+					toValue: 1,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+				Animated.timing(shimmerAnim, {
+					toValue: 0,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+			]),
+		).start();
+	}, [shimmerAnim]);
+
+	const opacity = shimmerAnim.interpolate({
+		inputRange: [0, 1],
+		outputRange: [0.3, 0.6],
+	});
+
+	return (
+		<>
+			<Animated.View
+				style={[styles.skeletonBrandName, { opacity, top: topInset + 16 }]}
+			/>
+			<View style={styles.content}>
+				<Animated.View style={[styles.skeletonTitle, { opacity }]} />
+				<Animated.View style={[styles.skeletonSubtitle, { opacity }]} />
+				<Animated.View style={[styles.skeletonButton, { opacity }]} />
+				<Animated.View style={[styles.skeletonButton, { opacity }]} />
+			</View>
+		</>
+	);
+};
 
 export default function Page() {
 	const { data: session, isPending } = authClient.useSession();
 	const [isLoading, setIsLoading] = useState(false);
+	const insets = useSafeAreaInsets();
+	const [fontsLoaded] = useFonts({
+		BebasNeue_400Regular,
+	});
 
-	if (isPending) {
+	if (isPending || !fontsLoaded) {
 		return (
-			<SafeAreaView style={styles.container}>
-				<View style={styles.content}>
-					<Text style={styles.title}>Loading...</Text>
-				</View>
-			</SafeAreaView>
+			<View style={styles.container}>
+				<SignInSkeleton topInset={insets.top} />
+			</View>
 		);
 	}
 
@@ -71,7 +116,8 @@ export default function Page() {
 	};
 
 	return (
-		<SafeAreaView style={styles.container}>
+		<View style={styles.container}>
+			<Text style={[styles.brandName, { top: insets.top + 16 }]}>Watchly</Text>
 			<View style={styles.content}>
 				<Text style={styles.title}>Welcome</Text>
 				<Text style={styles.subtitle}>Sign in to continue</Text>
@@ -100,7 +146,7 @@ export default function Page() {
 					</TouchableOpacity>
 				)}
 			</View>
-		</SafeAreaView>
+		</View>
 	);
 }
 
@@ -112,8 +158,15 @@ const styles = StyleSheet.create({
 	},
 	content: {
 		alignItems: "center",
-		// backgroundColor: 'rgba(17, 17, 17, 0.4)',
 		padding: 24,
+	},
+	brandName: {
+		position: "absolute",
+		alignSelf: "center",
+		fontSize: 48,
+		fontFamily: "BebasNeue_400Regular",
+		color: "#a855f7",
+		letterSpacing: 4,
 	},
 	title: {
 		fontSize: 28,
@@ -151,5 +204,35 @@ const styles = StyleSheet.create({
 	},
 	buttonIconApple: {
 		transform: [{ translateY: -2 }],
+	},
+	// Skeleton styles
+	skeletonBrandName: {
+		position: "absolute",
+		alignSelf: "center",
+		width: 200,
+		height: 56,
+		backgroundColor: "#222",
+		borderRadius: 8,
+	},
+	skeletonTitle: {
+		width: 150,
+		height: 32,
+		backgroundColor: "#222",
+		borderRadius: 8,
+		marginBottom: 8,
+	},
+	skeletonSubtitle: {
+		width: 180,
+		height: 18,
+		backgroundColor: "#1a1a1a",
+		borderRadius: 4,
+		marginBottom: 32,
+	},
+	skeletonButton: {
+		width: "100%",
+		height: 52,
+		backgroundColor: "#1a1a1a",
+		borderRadius: 4,
+		marginBottom: 16,
 	},
 });

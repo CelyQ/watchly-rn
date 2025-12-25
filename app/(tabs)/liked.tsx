@@ -1,7 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
 	Animated,
 	Image,
@@ -15,7 +15,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { $api, fetchClient } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
 
 const HEADER_HEIGHT = 60;
 const CARD_WIDTH = 120;
@@ -153,16 +152,43 @@ const MovieMediaCard = ({
 	);
 };
 
-const Index = () => {
-	const router = useRouter();
-	const { data: session, isPending } = authClient.useSession();
-	const [isAuthReady, setIsAuthReady] = useState(false);
+// Skeleton card component for loading state
+const MediaCardSkeleton = () => {
+	const shimmerAnim = useRef(new Animated.Value(0)).current;
 
 	useEffect(() => {
-		if (!isPending) {
-			setIsAuthReady(true);
-		}
-	}, [isPending]);
+		Animated.loop(
+			Animated.sequence([
+				Animated.timing(shimmerAnim, {
+					toValue: 1,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+				Animated.timing(shimmerAnim, {
+					toValue: 0,
+					duration: 1000,
+					useNativeDriver: true,
+				}),
+			]),
+		).start();
+	}, [shimmerAnim]);
+
+	const opacity = shimmerAnim.interpolate({
+		inputRange: [0, 1],
+		outputRange: [0.3, 0.6],
+	});
+
+	return (
+		<View style={styles.mediaCard}>
+			<Animated.View style={[styles.skeletonImage, { opacity }]} />
+			<Animated.View style={[styles.skeletonTitle, { opacity }]} />
+			<Animated.View style={[styles.skeletonSubtitle, { opacity }]} />
+		</View>
+	);
+};
+
+const Index = () => {
+	const router = useRouter();
 
 	const {
 		data: likesData,
@@ -172,10 +198,10 @@ const Index = () => {
 	} = $api.useQuery("get", "/api/v1/likes/list");
 
 	// Fetch progress data
-	const {
-		data: progressData,
-		refetch: refetchProgress,
-	} = $api.useQuery("get", "/api/v1/progress/all");
+	const { data: progressData, refetch: refetchProgress } = $api.useQuery(
+		"get",
+		"/api/v1/progress/all",
+	);
 
 	// Create lookup maps for progress
 	const tvProgressMap = useMemo(() => {
@@ -290,28 +316,6 @@ const Index = () => {
 		}, [refetchLikes, refetchProgress]),
 	);
 
-	if (!isAuthReady) {
-		return (
-			<SafeAreaView style={styles.container}>
-				<StatusBar barStyle="light-content" backgroundColor="#000" />
-				<View style={styles.loadingContainer}>
-					<Text style={styles.loadingText}>Loading...</Text>
-				</View>
-			</SafeAreaView>
-		);
-	}
-
-	if (!session?.user) {
-		return (
-			<SafeAreaView style={styles.container}>
-				<StatusBar barStyle="light-content" backgroundColor="#000" />
-				<View style={styles.loadingContainer}>
-					<Text style={styles.loadingText}>Please sign in to continue</Text>
-				</View>
-			</SafeAreaView>
-		);
-	}
-
 	return (
 		<SafeAreaView style={styles.container}>
 			<StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -333,7 +337,11 @@ const Index = () => {
 						contentContainerStyle={styles.mediaScrollContent}
 					>
 						{isMyShowsLoading && (
-							<Text style={styles.loadingText}>Loading...</Text>
+							<>
+								<MediaCardSkeleton />
+								<MediaCardSkeleton />
+								<MediaCardSkeleton />
+							</>
 						)}
 						{showsError && (
 							<View style={styles.errorContainer}>
@@ -392,7 +400,11 @@ const Index = () => {
 						contentContainerStyle={styles.mediaScrollContent}
 					>
 						{isMyMoviesLoading && (
-							<Text style={styles.loadingText}>Loading...</Text>
+							<>
+								<MediaCardSkeleton />
+								<MediaCardSkeleton />
+								<MediaCardSkeleton />
+							</>
 						)}
 						{moviesError && (
 							<View style={styles.errorContainer}>
@@ -484,6 +496,41 @@ const styles = StyleSheet.create({
 		flex: 1,
 		justifyContent: "center",
 		alignItems: "center",
+	},
+	// Skeleton Styles
+	skeletonImage: {
+		width: CARD_WIDTH,
+		height: CARD_IMAGE_HEIGHT,
+		borderRadius: 10,
+		backgroundColor: "#1a1a1a",
+	},
+	skeletonTitle: {
+		height: 14,
+		width: CARD_WIDTH * 0.8,
+		borderRadius: 4,
+		backgroundColor: "#1a1a1a",
+		marginTop: 8,
+	},
+	skeletonSubtitle: {
+		height: 10,
+		width: CARD_WIDTH * 0.5,
+		borderRadius: 4,
+		backgroundColor: "#1a1a1a",
+		marginTop: 4,
+	},
+	skeletonLabel: {
+		width: 60,
+		height: 12,
+		backgroundColor: "#1a1a1a",
+		borderRadius: 4,
+		marginBottom: 4,
+	},
+	skeletonSectionTitle: {
+		width: 100,
+		height: 24,
+		backgroundColor: "#1a1a1a",
+		borderRadius: 6,
+		marginBottom: 14,
 	},
 	emptyStateContainer: {
 		padding: 20,
