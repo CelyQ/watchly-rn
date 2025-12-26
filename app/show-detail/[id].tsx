@@ -126,9 +126,6 @@ const ShowDetail: FC = () => {
 			queryClient.invalidateQueries({
 				queryKey: ["get", "/api/v1/progress/all"],
 			});
-			queryClient.invalidateQueries({
-				queryKey: ["my-movies"],
-			});
 		},
 	});
 
@@ -144,9 +141,6 @@ const ShowDetail: FC = () => {
 			queryClient.invalidateQueries({
 				queryKey: ["get", "/api/v1/progress/tv"],
 			});
-			queryClient.invalidateQueries({
-				queryKey: ["my-shows"],
-			});
 		},
 	});
 
@@ -161,9 +155,6 @@ const ShowDetail: FC = () => {
 				});
 				queryClient.invalidateQueries({
 					queryKey: ["get", "/api/v1/progress/tv"],
-				});
-				queryClient.invalidateQueries({
-					queryKey: ["my-shows"],
 				});
 			},
 		},
@@ -588,36 +579,33 @@ const ShowDetail: FC = () => {
 				pointerEvents="auto"
 				collapsable={false}
 			>
-				<Animated.View
-					style={{ opacity: pulseAnim }}
-					pointerEvents="none"
-					collapsable={false}
+				<TouchableOpacity
+					style={[
+						styles.likeButton,
+						isLiked && styles.likeButtonActive,
+						styles.floatingLikeButtonInner,
+					]}
+					onPress={handleToggleLike}
+					onPressIn={() => {}}
+					onPressOut={() => {}}
+					delayPressIn={0}
+					delayPressOut={0}
+					disabled={isTogglingLike}
+					hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+					activeOpacity={0.7}
 				>
-					<TouchableOpacity
-						style={[
-							styles.likeButton,
-							isLiked && styles.likeButtonActive,
-							styles.floatingLikeButtonInner,
-						]}
-						onPress={handleToggleLike}
-						onPressIn={() => {}}
-						onPressOut={() => {}}
-						delayPressIn={0}
-						delayPressOut={0}
-						disabled={isTogglingLike}
-						hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-						activeOpacity={0.7}
+					<Animated.View
+						style={[styles.likeButtonContent, { opacity: pulseAnim }]}
+						pointerEvents="none"
 					>
-						<View style={styles.likeButtonContent} pointerEvents="none">
-							<Heart
-								stroke={isLiked ? "#fff" : "#b14aed"}
-								width={22}
-								height={22}
-								fill={isLiked ? "#fff" : "none"}
-							/>
-						</View>
-					</TouchableOpacity>
-				</Animated.View>
+						<Heart
+							stroke={isLiked ? "#fff" : "#b14aed"}
+							width={22}
+							height={22}
+							fill={isLiked ? "#fff" : "none"}
+						/>
+					</Animated.View>
+				</TouchableOpacity>
 			</Animated.View>
 
 			{/* Scrollable Content */}

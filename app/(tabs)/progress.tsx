@@ -13,7 +13,7 @@ import {
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { $api, fetchClient } from "@/lib/api";
+import { $api, createQueryKey, fetchClient } from "@/lib/api";
 
 const HEADER_HEIGHT = 60;
 const CARD_WIDTH = 120;
@@ -229,7 +229,7 @@ const Index = () => {
 	// Fetch title details only for items missing data
 	const detailQueries = useQueries({
 		queries: imdbIdsMissingDetails.map((imdbId) => ({
-			queryKey: ["progress-title-details", imdbId],
+			queryKey: createQueryKey("progress-title-details", imdbId),
 			queryFn: async () => {
 				const result = await fetchClient.GET("/api/v1/media/getTitleDetails", {
 					params: { query: { tt: imdbId } },
