@@ -377,7 +377,7 @@ const App = () => {
 							onChangeText={setSearchQuery}
 							keyboardAppearance="dark"
 							selectionColor="#b14aed"
-							returnKeyType="search"
+							returnKeyType="done"
 						/>
 						{searchQuery.length > 0 && (
 							<Pressable onPress={clearSearch} style={styles.clearButton}>

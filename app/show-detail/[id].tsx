@@ -92,8 +92,6 @@ const ShowDetail: FC = () => {
 	const imdbId = String(id);
 	const scrollY = useRef(new Animated.Value(0)).current;
 	const pulseAnim = useRef(new Animated.Value(1)).current;
-	const [isHeaderVisible, setIsHeaderVisible] = useState(false);
-	const [isFloatingButtonVisible, setIsFloatingButtonVisible] = useState(true);
 
 	const { data: likedData, refetch: refetchLiked } = $api.useQuery(
 		"get",
@@ -440,20 +438,6 @@ const ShowDetail: FC = () => {
 		setWatched(allEpisodesWatched);
 	}, [allEpisodesWatched]);
 
-	// Track header and floating button visibility for pointer events
-	useEffect(() => {
-		const listenerId = scrollY.addListener(({ value }) => {
-			// Header becomes visible around HEADER_HEIGHT - 50
-			setIsHeaderVisible(value > HEADER_HEIGHT - 50);
-			// Floating button becomes invisible around HEADER_HEIGHT - 150
-			setIsFloatingButtonVisible(value < HEADER_HEIGHT - 150);
-		});
-
-		return () => {
-			scrollY.removeListener(listenerId);
-		};
-	}, [scrollY]);
-
 	const isMarkingAsWatched = isSeries
 		? isMarkingAllEpisodesAsWatched
 		: isMarkingMovieAsWatched;
@@ -467,8 +451,6 @@ const ShowDetail: FC = () => {
 		});
 		refetchLiked();
 	};
-
-	if (isLoading) return <ShowDetailSkeleton router={router} />;
 
 	// Parallax animations
 	// Image scale - stretches when pulling down
@@ -539,7 +521,7 @@ const ShowDetail: FC = () => {
 					{ paddingTop: insets.top },
 					{ opacity: headerOpacity },
 				]}
-				pointerEvents={isHeaderVisible ? "auto" : "none"}
+				pointerEvents="box-none"
 			>
 				<Animated.View
 					style={[
@@ -553,6 +535,7 @@ const ShowDetail: FC = () => {
 					style={styles.headerBackButton}
 					onPress={() => router.back()}
 					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+					activeOpacity={0.7}
 				>
 					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
@@ -569,15 +552,47 @@ const ShowDetail: FC = () => {
 					{ top: insets.top + 10 },
 					{ opacity: imageBackButtonOpacity },
 				]}
-				pointerEvents={isFloatingButtonVisible ? "auto" : "none"}
+				pointerEvents="box-none"
 			>
 				<TouchableOpacity
 					style={styles.floatingBackButtonInner}
 					onPress={() => router.back()}
 					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+					activeOpacity={0.7}
 				>
 					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
+			</Animated.View>
+
+			{/* Like Button - Always accessible */}
+			<Animated.View
+				style={[
+					styles.floatingLikeButton,
+					{ top: insets.top + 10, right: 16 },
+					{ opacity: imageBackButtonOpacity },
+				]}
+				pointerEvents="box-none"
+			>
+				<Animated.View style={{ opacity: pulseAnim }} pointerEvents="box-none">
+					<TouchableOpacity
+						style={[
+							styles.likeButton,
+							isLiked && styles.likeButtonActive,
+							styles.floatingLikeButtonInner,
+						]}
+						onPress={handleToggleLike}
+						disabled={isTogglingLike}
+						hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+						activeOpacity={0.7}
+					>
+						<Heart
+							stroke={isLiked ? "#fff" : "#b14aed"}
+							width={22}
+							height={22}
+							fill={isLiked ? "#fff" : "none"}
+						/>
+					</TouchableOpacity>
+				</Animated.View>
 			</Animated.View>
 
 			{/* Scrollable Content */}
@@ -596,278 +611,283 @@ const ShowDetail: FC = () => {
 
 				{/* Content Card */}
 				<View style={styles.contentCard}>
-					{/* Title & Like Button Row */}
-					<View style={styles.titleRow}>
-						<Text style={styles.title}>{data?.titleText?.text}</Text>
-						<Animated.View
-							style={{ opacity: pulseAnim }}
-							pointerEvents="box-none"
-						>
-							<TouchableOpacity
-								style={[styles.likeButton, isLiked && styles.likeButtonActive]}
-								onPress={handleToggleLike}
-								disabled={isTogglingLike}
-								hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-							>
-								<Heart
-									stroke={isLiked ? "#fff" : "#b14aed"}
-									width={22}
-									height={22}
-									fill={isLiked ? "#fff" : "none"}
-								/>
-							</TouchableOpacity>
-						</Animated.View>
-					</View>
-
-					{/* Meta Info */}
-					<View style={styles.metaRow}>
-						{data?.releaseYear && (
-							<Text style={styles.year}>
-								{data.releaseYear.year}
-								{data.releaseYear.endYear
-									? ` - ${data.releaseYear.endYear}`
-									: ""}
-							</Text>
-						)}
-						{isSeries && <View style={styles.metaDot} />}
-						{isSeries && <Text style={styles.metaText}>TV Series</Text>}
-					</View>
-
-					{/* Genres */}
-					<View style={styles.genresRow}>
-						{data?.titleType?.categories?.map((cat) => (
-							<View key={cat.id} style={styles.genreTag}>
-								<Text style={styles.genreText}>{cat.text}</Text>
+					{isLoading ? (
+						<ShowDetailSkeleton router={router} />
+					) : (
+						<>
+							{/* Title Row */}
+							<View style={styles.titleRow}>
+								<Text style={styles.title}>{data?.titleText?.text}</Text>
 							</View>
-						))}
-					</View>
 
-					{/* Description */}
-					{plot?.plotText?.plainText && (
-						<Text style={styles.description}>{plot.plotText.plainText}</Text>
-					)}
+							{/* Meta Info */}
+							<View style={styles.metaRow}>
+								{data?.releaseYear && (
+									<Text style={styles.year}>
+										{data.releaseYear.year}
+										{data.releaseYear.endYear
+											? ` - ${data.releaseYear.endYear}`
+											: ""}
+									</Text>
+								)}
+								{isSeries && <View style={styles.metaDot} />}
+								{isSeries && <Text style={styles.metaText}>TV Series</Text>}
+							</View>
 
-					{/* Action Button */}
-					{!isLoading &&
-						!isProgressLoading &&
-						(watched ? (
-							<TouchableOpacity
-								style={[
-									styles.actionButton,
-									styles.removeButton,
-									isRemovingFromWatched && styles.actionButtonDisabled,
-								]}
-								onPress={() => void handleRemoveFromWatched()}
-								disabled={isRemovingFromWatched}
-								activeOpacity={0.7}
-							>
-								<Text style={styles.actionButtonText}>
-									{isRemovingFromWatched
-										? "Removing..."
-										: "Remove from Watched"}
+							{/* Genres */}
+							<View style={styles.genresRow}>
+								{data?.titleType?.categories?.map((cat) => (
+									<View key={cat.id} style={styles.genreTag}>
+										<Text style={styles.genreText}>{cat.text}</Text>
+									</View>
+								))}
+							</View>
+
+							{/* Description */}
+							{plot?.plotText?.plainText && (
+								<Text style={styles.description}>
+									{plot.plotText.plainText}
 								</Text>
-							</TouchableOpacity>
-						) : (
-							<TouchableOpacity
-								style={[
-									styles.actionButton,
-									isMarkingAsWatched && styles.actionButtonDisabled,
-								]}
-								onPress={() => void handleMarkAsWatched()}
-								disabled={isMarkingAsWatched}
-								activeOpacity={0.7}
-							>
-								<Text style={styles.actionButtonText}>
-									{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
-								</Text>
-							</TouchableOpacity>
-						))}
+							)}
 
-					{/* Watch Providers Section */}
-					{watchProvidersData?.results?.[userRegion] && (
-						<View style={styles.section}>
-							<Text style={styles.sectionTitle}>Where to Watch</Text>
-							{watchProvidersData.results[userRegion].flatrate &&
-								watchProvidersData.results[userRegion].flatrate.length > 0 && (
-									<View style={styles.providerCategory}>
-										<Text style={styles.providerCategoryLabel}>Stream</Text>
-										<View style={styles.providersRow}>
-											{watchProvidersData.results[userRegion].flatrate.map(
-												(provider) => (
-													<View
-														key={provider.provider_id}
-														style={styles.providerItem}
-													>
-														<View style={styles.providerLogoContainer}>
-															<Image
-																source={{
-																	uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
-																}}
-																style={styles.providerLogo}
-																resizeMode="contain"
-															/>
-														</View>
-														<Text style={styles.providerName} numberOfLines={2}>
-															{provider.provider_name}
-														</Text>
-													</View>
-												),
-											)}
-										</View>
-									</View>
-								)}
-							{watchProvidersData.results[userRegion].rent &&
-								watchProvidersData.results[userRegion].rent.length > 0 && (
-									<View style={styles.providerCategory}>
-										<Text style={styles.providerCategoryLabel}>Rent</Text>
-										<View style={styles.providersRow}>
-											{watchProvidersData.results[userRegion].rent.map(
-												(provider) => (
-													<View
-														key={provider.provider_id}
-														style={styles.providerItem}
-													>
-														<View style={styles.providerLogoContainer}>
-															<Image
-																source={{
-																	uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
-																}}
-																style={styles.providerLogo}
-																resizeMode="contain"
-															/>
-														</View>
-														<Text style={styles.providerName} numberOfLines={2}>
-															{provider.provider_name}
-														</Text>
-													</View>
-												),
-											)}
-										</View>
-									</View>
-								)}
-							{watchProvidersData.results[userRegion].buy &&
-								watchProvidersData.results[userRegion].buy.length > 0 && (
-									<View style={styles.providerCategory}>
-										<Text style={styles.providerCategoryLabel}>Buy</Text>
-										<View style={styles.providersRow}>
-											{watchProvidersData.results[userRegion].buy.map(
-												(provider) => (
-													<View
-														key={provider.provider_id}
-														style={styles.providerItem}
-													>
-														<View style={styles.providerLogoContainer}>
-															<Image
-																source={{
-																	uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
-																}}
-																style={styles.providerLogo}
-																resizeMode="contain"
-															/>
-														</View>
-														<Text style={styles.providerName} numberOfLines={2}>
-															{provider.provider_name}
-														</Text>
-													</View>
-												),
-											)}
-										</View>
-									</View>
-								)}
-							<View style={styles.justWatchAttribution}>
-								<Text style={styles.poweredByText}>Powered by</Text>
-								<Image
-									alt="JustWatch logo"
-									source={require("@/assets/justwatch-logo-small.png")}
-									style={styles.justWatchLogo}
-									resizeMode="contain"
-								/>
-							</View>
-						</View>
-					)}
+							{/* Action Button */}
+							{!isLoading &&
+								!isProgressLoading &&
+								(watched ? (
+									<TouchableOpacity
+										style={[
+											styles.actionButton,
+											styles.removeButton,
+											isRemovingFromWatched && styles.actionButtonDisabled,
+										]}
+										onPress={() => void handleRemoveFromWatched()}
+										disabled={isRemovingFromWatched}
+										activeOpacity={0.7}
+									>
+										<Text style={styles.actionButtonText}>
+											{isRemovingFromWatched
+												? "Removing..."
+												: "Remove from Watched"}
+										</Text>
+									</TouchableOpacity>
+								) : (
+									<TouchableOpacity
+										style={[
+											styles.actionButton,
+											isMarkingAsWatched && styles.actionButtonDisabled,
+										]}
+										onPress={() => void handleMarkAsWatched()}
+										disabled={isMarkingAsWatched}
+										activeOpacity={0.7}
+									>
+										<Text style={styles.actionButtonText}>
+											{isMarkingAsWatched ? "Marking..." : "Mark as Watched"}
+										</Text>
+									</TouchableOpacity>
+								))}
 
-					{/* Seasons Section */}
-					{isSeries &&
-						seasonsTitle?.episodes?.displayableSeasons?.edges &&
-						seasonsTitle.episodes.displayableSeasons.edges.length > 0 && (
-							<View style={styles.section}>
-								<Text style={styles.sectionTitle}>Seasons</Text>
-								<Animated.ScrollView
-									horizontal
-									showsHorizontalScrollIndicator={false}
-									contentContainerStyle={styles.horizontalScroll}
-								>
-									{seasonsTitle.episodes.displayableSeasons.edges.map(
-										(seasonEdge) => {
-											const seasonNum = Number.parseInt(
-												seasonEdge.node.season,
-												10,
-											);
-											const seasonProgressData = seasonProgress.get(seasonNum);
-											const isSeasonWatched = watchedSeasons.has(seasonNum);
-											return (
-												<SeasonCard
-													key={seasonEdge.node.id}
-													showId={String(id)}
-													seasonNumber={seasonEdge.node.season}
-													seasonText={seasonEdge.node.text}
-													isWatched={isSeasonWatched}
-													progress={seasonProgressData?.progress ?? 0}
-												/>
-											);
-										},
-									)}
-								</Animated.ScrollView>
-							</View>
-						)}
-
-					{/* Cast Section */}
-					{castTitle?.principalCredits &&
-						castTitle.principalCredits.length > 0 && (
-							<View style={styles.section}>
-								<Text style={styles.sectionTitle}>Cast</Text>
-								<Animated.ScrollView
-									horizontal
-									showsHorizontalScrollIndicator={false}
-									contentContainerStyle={styles.horizontalScroll}
-								>
-									{castTitle.principalCredits
-										.flatMap((creditGroup) => creditGroup.credits)
-										.filter(
-											(
-												credit,
-											): credit is Extract<
-												typeof credit,
-												{ __typename: "Cast" }
-											> => credit.__typename === "Cast",
-										)
-										.slice(0, 10)
-										.map((cast, i) => (
-											<View
-												key={`${cast.name.id}-${i}`}
-												style={styles.castItem}
-											>
-												<Image
-													source={{
-														uri:
-															cast.name.primaryImage?.url ??
-															"https://via.placeholder.com/100x100/333/fff?text=?",
-													}}
-													style={styles.castImage}
-												/>
-												<Text style={styles.castName} numberOfLines={1}>
-													{cast.name.nameText.text}
-												</Text>
-												{cast.characters.length > 0 && cast.characters[0] && (
-													<Text style={styles.castCharacter} numberOfLines={1}>
-														{cast.characters[0].name}
-													</Text>
-												)}
+							{/* Watch Providers Section */}
+							{watchProvidersData?.results?.[userRegion] && (
+								<View style={styles.section}>
+									<Text style={styles.sectionTitle}>Where to Watch</Text>
+									{watchProvidersData.results[userRegion].flatrate &&
+										watchProvidersData.results[userRegion].flatrate.length >
+											0 && (
+											<View style={styles.providerCategory}>
+												<Text style={styles.providerCategoryLabel}>Stream</Text>
+												<View style={styles.providersRow}>
+													{watchProvidersData.results[userRegion].flatrate.map(
+														(provider) => (
+															<View
+																key={provider.provider_id}
+																style={styles.providerItem}
+															>
+																<View style={styles.providerLogoContainer}>
+																	<Image
+																		source={{
+																			uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
+																		}}
+																		style={styles.providerLogo}
+																		resizeMode="contain"
+																	/>
+																</View>
+																<Text
+																	style={styles.providerName}
+																	numberOfLines={2}
+																>
+																	{provider.provider_name}
+																</Text>
+															</View>
+														),
+													)}
+												</View>
 											</View>
-										))}
-								</Animated.ScrollView>
-							</View>
-						)}
+										)}
+									{watchProvidersData.results[userRegion].rent &&
+										watchProvidersData.results[userRegion].rent.length > 0 && (
+											<View style={styles.providerCategory}>
+												<Text style={styles.providerCategoryLabel}>Rent</Text>
+												<View style={styles.providersRow}>
+													{watchProvidersData.results[userRegion].rent.map(
+														(provider) => (
+															<View
+																key={provider.provider_id}
+																style={styles.providerItem}
+															>
+																<View style={styles.providerLogoContainer}>
+																	<Image
+																		source={{
+																			uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
+																		}}
+																		style={styles.providerLogo}
+																		resizeMode="contain"
+																	/>
+																</View>
+																<Text
+																	style={styles.providerName}
+																	numberOfLines={2}
+																>
+																	{provider.provider_name}
+																</Text>
+															</View>
+														),
+													)}
+												</View>
+											</View>
+										)}
+									{watchProvidersData.results[userRegion].buy &&
+										watchProvidersData.results[userRegion].buy.length > 0 && (
+											<View style={styles.providerCategory}>
+												<Text style={styles.providerCategoryLabel}>Buy</Text>
+												<View style={styles.providersRow}>
+													{watchProvidersData.results[userRegion].buy.map(
+														(provider) => (
+															<View
+																key={provider.provider_id}
+																style={styles.providerItem}
+															>
+																<View style={styles.providerLogoContainer}>
+																	<Image
+																		source={{
+																			uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
+																		}}
+																		style={styles.providerLogo}
+																		resizeMode="contain"
+																	/>
+																</View>
+																<Text
+																	style={styles.providerName}
+																	numberOfLines={2}
+																>
+																	{provider.provider_name}
+																</Text>
+															</View>
+														),
+													)}
+												</View>
+											</View>
+										)}
+									<View style={styles.justWatchAttribution}>
+										<Text style={styles.poweredByText}>Powered by</Text>
+										<Image
+											alt="JustWatch logo"
+											source={require("@/assets/justwatch-logo-small.png")}
+											style={styles.justWatchLogo}
+											resizeMode="contain"
+										/>
+									</View>
+								</View>
+							)}
+
+							{/* Seasons Section */}
+							{isSeries &&
+								seasonsTitle?.episodes?.displayableSeasons?.edges &&
+								seasonsTitle.episodes.displayableSeasons.edges.length > 0 && (
+									<View style={styles.section}>
+										<Text style={styles.sectionTitle}>Seasons</Text>
+										<Animated.ScrollView
+											horizontal
+											showsHorizontalScrollIndicator={false}
+											contentContainerStyle={styles.horizontalScroll}
+										>
+											{seasonsTitle.episodes.displayableSeasons.edges.map(
+												(seasonEdge) => {
+													const seasonNum = Number.parseInt(
+														seasonEdge.node.season,
+														10,
+													);
+													const seasonProgressData =
+														seasonProgress.get(seasonNum);
+													const isSeasonWatched = watchedSeasons.has(seasonNum);
+													return (
+														<SeasonCard
+															key={seasonEdge.node.id}
+															showId={String(id)}
+															seasonNumber={seasonEdge.node.season}
+															seasonText={seasonEdge.node.text}
+															isWatched={isSeasonWatched}
+															progress={seasonProgressData?.progress ?? 0}
+														/>
+													);
+												},
+											)}
+										</Animated.ScrollView>
+									</View>
+								)}
+
+							{/* Cast Section */}
+							{castTitle?.principalCredits &&
+								castTitle.principalCredits.length > 0 && (
+									<View style={styles.section}>
+										<Text style={styles.sectionTitle}>Cast</Text>
+										<Animated.ScrollView
+											horizontal
+											showsHorizontalScrollIndicator={false}
+											contentContainerStyle={styles.horizontalScroll}
+										>
+											{castTitle.principalCredits
+												.flatMap((creditGroup) => creditGroup.credits)
+												.filter(
+													(
+														credit,
+													): credit is Extract<
+														typeof credit,
+														{ __typename: "Cast" }
+													> => credit.__typename === "Cast",
+												)
+												.slice(0, 10)
+												.map((cast, i) => (
+													<View
+														key={`${cast.name.id}-${i}`}
+														style={styles.castItem}
+													>
+														<Image
+															source={{
+																uri:
+																	cast.name.primaryImage?.url ??
+																	"https://via.placeholder.com/100x100/333/fff?text=?",
+															}}
+															style={styles.castImage}
+														/>
+														<Text style={styles.castName} numberOfLines={1}>
+															{cast.name.nameText.text}
+														</Text>
+														{cast.characters.length > 0 &&
+															cast.characters[0] && (
+																<Text
+																	style={styles.castCharacter}
+																	numberOfLines={1}
+																>
+																	{cast.characters[0].name}
+																</Text>
+															)}
+													</View>
+												))}
+										</Animated.ScrollView>
+									</View>
+								)}
+						</>
+					)}
 				</View>
 
 				<View style={{ height: 50 }} />
@@ -932,6 +952,7 @@ const styles = StyleSheet.create({
 		backgroundColor: "rgba(255,255,255,0.1)",
 		justifyContent: "center",
 		alignItems: "center",
+		zIndex: 25,
 	},
 	headerTitle: {
 		flex: 1,
@@ -947,7 +968,7 @@ const styles = StyleSheet.create({
 	floatingBackButton: {
 		position: "absolute",
 		left: 16,
-		zIndex: 15,
+		zIndex: 25,
 	},
 	floatingBackButtonInner: {
 		width: 44,
@@ -956,6 +977,18 @@ const styles = StyleSheet.create({
 		backgroundColor: "rgba(0,0,0,0.5)",
 		justifyContent: "center",
 		alignItems: "center",
+		zIndex: 26,
+	},
+	// Floating Like Button
+	floatingLikeButton: {
+		position: "absolute",
+		right: 16,
+		zIndex: 25,
+	},
+	floatingLikeButtonInner: {
+		width: 48,
+		height: 48,
+		borderRadius: 24,
 	},
 	// Content
 	contentCard: {
