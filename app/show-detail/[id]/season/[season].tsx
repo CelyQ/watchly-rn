@@ -136,6 +136,7 @@ const SeasonScreen: React.FC = () => {
 		});
 
 	const title = detailsData?.title?.titleText?.text ?? "";
+	const showPosterUrl = detailsData?.title?.primaryImage?.url;
 
 	type EpisodeEdge = {
 		node: {
@@ -214,6 +215,8 @@ const SeasonScreen: React.FC = () => {
 					seasonNumber,
 					episodeNumber,
 					isWatched: !currentlyWatched,
+					title: title || undefined,
+					posterUrl: showPosterUrl,
 				},
 			});
 			// Optimistically update local episode state so the circle color
@@ -289,6 +292,8 @@ const SeasonScreen: React.FC = () => {
 				imdbId,
 				episodes: episodesToMark,
 				isWatched: true,
+				title: title || undefined,
+				posterUrl: showPosterUrl,
 			},
 		});
 

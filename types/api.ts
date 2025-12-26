@@ -292,6 +292,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/media/getWatchProviders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiV1MediaGetWatchProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -439,14 +455,20 @@ export interface operations {
                 "application/json": {
                     imdbId: string;
                     isWatched?: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
                 "application/x-www-form-urlencoded": {
                     imdbId: string;
                     isWatched?: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
                 "multipart/form-data": {
                     imdbId: string;
                     isWatched?: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
             };
         };
@@ -546,18 +568,24 @@ export interface operations {
                     seasonNumber: number;
                     episodeNumber: number;
                     isWatched?: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
                 "application/x-www-form-urlencoded": {
                     imdbId: string;
                     seasonNumber: number;
                     episodeNumber: number;
                     isWatched?: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
                 "multipart/form-data": {
                     imdbId: string;
                     seasonNumber: number;
                     episodeNumber: number;
                     isWatched?: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
             };
         };
@@ -684,6 +712,8 @@ export interface operations {
                         episodeNumber: number;
                     }[];
                     isWatched: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
                 "application/x-www-form-urlencoded": {
                     imdbId: string;
@@ -692,6 +722,8 @@ export interface operations {
                         episodeNumber: number;
                     }[];
                     isWatched: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
                 "multipart/form-data": {
                     imdbId: string;
@@ -700,6 +732,8 @@ export interface operations {
                         episodeNumber: number;
                     }[];
                     isWatched: boolean;
+                    title?: string;
+                    posterUrl?: string;
                 };
             };
         };
@@ -1419,7 +1453,7 @@ export interface operations {
         parameters: {
             query: {
                 tt: string;
-                seasonNumber: number;
+                seasonNumber: string | number;
             };
             header?: never;
             path?: never;
@@ -1454,7 +1488,7 @@ export interface operations {
         parameters: {
             query: {
                 query: string;
-                page: number;
+                page: string | number;
             };
             header?: never;
             path?: never;
@@ -1507,6 +1541,60 @@ export interface operations {
                         })[];
                         total_pages: number;
                         total_results: number;
+                    };
+                };
+            };
+        };
+    };
+    getApiV1MediaGetWatchProviders: {
+        parameters: {
+            query: {
+                tt: string;
+                mediaType: "movie" | "tv";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: number;
+                        results: {
+                            [key: string]: {
+                                link: string;
+                                flatrate?: {
+                                    logo_path: string;
+                                    provider_id: number;
+                                    provider_name: string;
+                                    display_priority: number;
+                                }[];
+                                rent?: {
+                                    logo_path: string;
+                                    provider_id: number;
+                                    provider_name: string;
+                                    display_priority: number;
+                                }[];
+                                buy?: {
+                                    logo_path: string;
+                                    provider_id: number;
+                                    provider_name: string;
+                                    display_priority: number;
+                                }[];
+                                ads?: {
+                                    logo_path: string;
+                                    provider_id: number;
+                                    provider_name: string;
+                                    display_priority: number;
+                                }[];
+                            };
+                        };
                     };
                 };
             };

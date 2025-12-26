@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { getLocales } from "expo-localization";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { FC } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +18,9 @@ import { queryClient } from "@/app/_layout";
 import { SeasonCard } from "@/components/season-card";
 import { ShowDetailSkeleton } from "@/components/show-detail-skeleton";
 import { $api, fetchClient } from "@/lib/api";
+
+// Get user's region code for watch providers
+const userRegion = getLocales()[0]?.regionCode ?? "US";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HEADER_HEIGHT = 420;
@@ -88,6 +92,8 @@ const ShowDetail: FC = () => {
 	const imdbId = String(id);
 	const scrollY = useRef(new Animated.Value(0)).current;
 	const pulseAnim = useRef(new Animated.Value(1)).current;
+	const [isHeaderVisible, setIsHeaderVisible] = useState(false);
+	const [isFloatingButtonVisible, setIsFloatingButtonVisible] = useState(true);
 
 	const { data: likedData, refetch: refetchLiked } = $api.useQuery(
 		"get",
@@ -167,6 +173,9 @@ const ShowDetail: FC = () => {
 
 	const handleMarkAsWatched = async () => {
 		try {
+			const title = data?.titleText?.text;
+			const posterUrl = data?.primaryImage?.url;
+
 			if (isSeries) {
 				const episodes = await fetchAllEpisodesForShow(String(id));
 
@@ -180,6 +189,8 @@ const ShowDetail: FC = () => {
 						imdbId: String(id),
 						episodes,
 						isWatched: true,
+						title,
+						posterUrl,
 					},
 				});
 			} else {
@@ -187,6 +198,8 @@ const ShowDetail: FC = () => {
 					body: {
 						imdbId: String(id),
 						isWatched: true,
+						title,
+						posterUrl,
 					},
 				});
 			}
@@ -198,6 +211,9 @@ const ShowDetail: FC = () => {
 	const handleRemoveFromWatched = async () => {
 		setIsRemovingFromWatched(true);
 		try {
+			const title = data?.titleText?.text;
+			const posterUrl = data?.primaryImage?.url;
+
 			if (isSeries) {
 				const episodes = await fetchAllEpisodesForShow(String(id));
 				if (episodes.length === 0) {
@@ -210,6 +226,8 @@ const ShowDetail: FC = () => {
 						imdbId: String(id),
 						episodes,
 						isWatched: false,
+						title,
+						posterUrl,
 					},
 				});
 			} else {
@@ -217,6 +235,8 @@ const ShowDetail: FC = () => {
 					body: {
 						imdbId: String(id),
 						isWatched: false,
+						title,
+						posterUrl,
 					},
 				});
 			}
@@ -286,6 +306,23 @@ const ShowDetail: FC = () => {
 
 	const data = details?.title;
 	const isSeries = data?.titleType?.isSeries === true;
+
+	// Fetch watch providers
+	const { data: watchProvidersData } = $api.useQuery(
+		"get",
+		"/api/v1/media/getWatchProviders",
+		{
+			params: {
+				query: {
+					tt: imdbId,
+					mediaType: isSeries ? "tv" : "movie",
+				},
+			},
+		},
+		{
+			enabled: !isLoading && details !== undefined,
+		},
+	);
 
 	// Fetch TV-specific progress data for accurate season progress bars
 	const { data: tvProgressData } = $api.useQuery(
@@ -403,6 +440,20 @@ const ShowDetail: FC = () => {
 		setWatched(allEpisodesWatched);
 	}, [allEpisodesWatched]);
 
+	// Track header and floating button visibility for pointer events
+	useEffect(() => {
+		const listenerId = scrollY.addListener(({ value }) => {
+			// Header becomes visible around HEADER_HEIGHT - 50
+			setIsHeaderVisible(value > HEADER_HEIGHT - 50);
+			// Floating button becomes invisible around HEADER_HEIGHT - 150
+			setIsFloatingButtonVisible(value < HEADER_HEIGHT - 150);
+		});
+
+		return () => {
+			scrollY.removeListener(listenerId);
+		};
+	}, [scrollY]);
+
 	const isMarkingAsWatched = isSeries
 		? isMarkingAllEpisodesAsWatched
 		: isMarkingMovieAsWatched;
@@ -488,6 +539,7 @@ const ShowDetail: FC = () => {
 					{ paddingTop: insets.top },
 					{ opacity: headerOpacity },
 				]}
+				pointerEvents={isHeaderVisible ? "auto" : "none"}
 			>
 				<Animated.View
 					style={[
@@ -495,6 +547,7 @@ const ShowDetail: FC = () => {
 						styles.stickyHeaderBg,
 						{ opacity: headerBgOpacity },
 					]}
+					pointerEvents="none"
 				/>
 				<TouchableOpacity
 					style={styles.headerBackButton}
@@ -516,6 +569,7 @@ const ShowDetail: FC = () => {
 					{ top: insets.top + 10 },
 					{ opacity: imageBackButtonOpacity },
 				]}
+				pointerEvents={isFloatingButtonVisible ? "auto" : "none"}
 			>
 				<TouchableOpacity
 					style={styles.floatingBackButtonInner}
@@ -545,7 +599,10 @@ const ShowDetail: FC = () => {
 					{/* Title & Like Button Row */}
 					<View style={styles.titleRow}>
 						<Text style={styles.title}>{data?.titleText?.text}</Text>
-						<Animated.View style={{ opacity: pulseAnim }}>
+						<Animated.View
+							style={{ opacity: pulseAnim }}
+							pointerEvents="box-none"
+						>
 							<TouchableOpacity
 								style={[styles.likeButton, isLiked && styles.likeButtonActive]}
 								onPress={handleToggleLike}
@@ -625,6 +682,109 @@ const ShowDetail: FC = () => {
 								</Text>
 							</TouchableOpacity>
 						))}
+
+					{/* Watch Providers Section */}
+					{watchProvidersData?.results?.[userRegion] && (
+						<View style={styles.section}>
+							<Text style={styles.sectionTitle}>Where to Watch</Text>
+							{watchProvidersData.results[userRegion].flatrate &&
+								watchProvidersData.results[userRegion].flatrate.length > 0 && (
+									<View style={styles.providerCategory}>
+										<Text style={styles.providerCategoryLabel}>Stream</Text>
+										<View style={styles.providersRow}>
+											{watchProvidersData.results[userRegion].flatrate.map(
+												(provider) => (
+													<View
+														key={provider.provider_id}
+														style={styles.providerItem}
+													>
+														<View style={styles.providerLogoContainer}>
+															<Image
+																source={{
+																	uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
+																}}
+																style={styles.providerLogo}
+																resizeMode="contain"
+															/>
+														</View>
+														<Text style={styles.providerName} numberOfLines={2}>
+															{provider.provider_name}
+														</Text>
+													</View>
+												),
+											)}
+										</View>
+									</View>
+								)}
+							{watchProvidersData.results[userRegion].rent &&
+								watchProvidersData.results[userRegion].rent.length > 0 && (
+									<View style={styles.providerCategory}>
+										<Text style={styles.providerCategoryLabel}>Rent</Text>
+										<View style={styles.providersRow}>
+											{watchProvidersData.results[userRegion].rent.map(
+												(provider) => (
+													<View
+														key={provider.provider_id}
+														style={styles.providerItem}
+													>
+														<View style={styles.providerLogoContainer}>
+															<Image
+																source={{
+																	uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
+																}}
+																style={styles.providerLogo}
+																resizeMode="contain"
+															/>
+														</View>
+														<Text style={styles.providerName} numberOfLines={2}>
+															{provider.provider_name}
+														</Text>
+													</View>
+												),
+											)}
+										</View>
+									</View>
+								)}
+							{watchProvidersData.results[userRegion].buy &&
+								watchProvidersData.results[userRegion].buy.length > 0 && (
+									<View style={styles.providerCategory}>
+										<Text style={styles.providerCategoryLabel}>Buy</Text>
+										<View style={styles.providersRow}>
+											{watchProvidersData.results[userRegion].buy.map(
+												(provider) => (
+													<View
+														key={provider.provider_id}
+														style={styles.providerItem}
+													>
+														<View style={styles.providerLogoContainer}>
+															<Image
+																source={{
+																	uri: `https://image.tmdb.org/t/p/w92${provider.logo_path}`,
+																}}
+																style={styles.providerLogo}
+																resizeMode="contain"
+															/>
+														</View>
+														<Text style={styles.providerName} numberOfLines={2}>
+															{provider.provider_name}
+														</Text>
+													</View>
+												),
+											)}
+										</View>
+									</View>
+								)}
+							<View style={styles.justWatchAttribution}>
+								<Text style={styles.poweredByText}>Powered by</Text>
+								<Image
+									alt="JustWatch logo"
+									source={require("@/assets/justwatch-logo-small.png")}
+									style={styles.justWatchLogo}
+									resizeMode="contain"
+								/>
+							</View>
+						</View>
+					)}
 
 					{/* Seasons Section */}
 					{isSeries &&
@@ -935,6 +1095,62 @@ const styles = StyleSheet.create({
 		color: "#666",
 		fontSize: 11,
 		textAlign: "center",
+	},
+	// Watch Providers
+	providerCategory: {
+		marginBottom: 16,
+	},
+	providerCategoryLabel: {
+		color: "#888",
+		fontSize: 13,
+		fontWeight: "600",
+		textTransform: "uppercase",
+		letterSpacing: 0.5,
+		marginBottom: 10,
+	},
+	providersRow: {
+		flexDirection: "row",
+		flexWrap: "wrap",
+		gap: 12,
+	},
+	providerItem: {
+		alignItems: "center",
+		width: 64,
+	},
+	providerLogoContainer: {
+		width: 52,
+		height: 52,
+		borderRadius: 12,
+		backgroundColor: "#1a1a1a",
+		marginBottom: 6,
+		overflow: "hidden",
+	},
+	providerLogo: {
+		width: "100%",
+		height: "100%",
+		borderRadius: 12,
+	},
+	providerName: {
+		color: "#aaa",
+		fontSize: 10,
+		textAlign: "center",
+		lineHeight: 12,
+	},
+	justWatchAttribution: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "flex-start",
+		marginTop: 8,
+		gap: 6,
+	},
+	poweredByText: {
+		color: "#555",
+		fontSize: 11,
+	},
+	justWatchLogo: {
+		width: 80,
+		height: 16,
+		opacity: 0.6,
 	},
 });
 
