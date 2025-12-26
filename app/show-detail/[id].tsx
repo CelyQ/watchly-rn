@@ -521,7 +521,8 @@ const ShowDetail: FC = () => {
 					{ paddingTop: insets.top },
 					{ opacity: headerOpacity },
 				]}
-				pointerEvents="box-none"
+				pointerEvents="auto"
+				collapsable={false}
 			>
 				<Animated.View
 					style={[
@@ -534,10 +535,16 @@ const ShowDetail: FC = () => {
 				<TouchableOpacity
 					style={styles.headerBackButton}
 					onPress={() => router.back()}
+					onPressIn={() => {}}
+					onPressOut={() => {}}
+					delayPressIn={0}
+					delayPressOut={0}
 					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 					activeOpacity={0.7}
 				>
-					<ArrowLeft stroke="#fff" width={24} height={24} />
+					<View style={styles.backButtonContent} pointerEvents="none">
+						<ArrowLeft stroke="#fff" width={24} height={24} />
+					</View>
 				</TouchableOpacity>
 				<Text style={styles.headerTitle} numberOfLines={1}>
 					{data?.titleText?.text}
@@ -552,15 +559,22 @@ const ShowDetail: FC = () => {
 					{ top: insets.top + 10 },
 					{ opacity: imageBackButtonOpacity },
 				]}
-				pointerEvents="box-none"
+				pointerEvents="auto"
+				collapsable={false}
 			>
 				<TouchableOpacity
 					style={styles.floatingBackButtonInner}
 					onPress={() => router.back()}
+					onPressIn={() => {}}
+					onPressOut={() => {}}
+					delayPressIn={0}
+					delayPressOut={0}
 					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 					activeOpacity={0.7}
 				>
-					<ArrowLeft stroke="#fff" width={24} height={24} />
+					<View style={styles.backButtonContent} pointerEvents="none">
+						<ArrowLeft stroke="#fff" width={24} height={24} />
+					</View>
 				</TouchableOpacity>
 			</Animated.View>
 
@@ -571,9 +585,14 @@ const ShowDetail: FC = () => {
 					{ top: insets.top + 10, right: 16 },
 					{ opacity: imageBackButtonOpacity },
 				]}
-				pointerEvents="box-none"
+				pointerEvents="auto"
+				collapsable={false}
 			>
-				<Animated.View style={{ opacity: pulseAnim }} pointerEvents="box-none">
+				<Animated.View
+					style={{ opacity: pulseAnim }}
+					pointerEvents="none"
+					collapsable={false}
+				>
 					<TouchableOpacity
 						style={[
 							styles.likeButton,
@@ -581,16 +600,22 @@ const ShowDetail: FC = () => {
 							styles.floatingLikeButtonInner,
 						]}
 						onPress={handleToggleLike}
+						onPressIn={() => {}}
+						onPressOut={() => {}}
+						delayPressIn={0}
+						delayPressOut={0}
 						disabled={isTogglingLike}
-						hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+						hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
 						activeOpacity={0.7}
 					>
-						<Heart
-							stroke={isLiked ? "#fff" : "#b14aed"}
-							width={22}
-							height={22}
-							fill={isLiked ? "#fff" : "none"}
-						/>
+						<View style={styles.likeButtonContent} pointerEvents="none">
+							<Heart
+								stroke={isLiked ? "#fff" : "#b14aed"}
+								width={22}
+								height={22}
+								fill={isLiked ? "#fff" : "none"}
+							/>
+						</View>
 					</TouchableOpacity>
 				</Animated.View>
 			</Animated.View>
@@ -605,6 +630,7 @@ const ShowDetail: FC = () => {
 				)}
 				scrollEventThrottle={16}
 				showsVerticalScrollIndicator={false}
+				keyboardShouldPersistTaps="handled"
 			>
 				{/* Spacer for hero image */}
 				<View style={{ height: HEADER_HEIGHT - 80 }} />
@@ -954,6 +980,12 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		zIndex: 25,
 	},
+	backButtonContent: {
+		width: "100%",
+		height: "100%",
+		justifyContent: "center",
+		alignItems: "center",
+	},
 	headerTitle: {
 		flex: 1,
 		color: "#fff",
@@ -989,6 +1021,12 @@ const styles = StyleSheet.create({
 		width: 48,
 		height: 48,
 		borderRadius: 24,
+	},
+	likeButtonContent: {
+		width: "100%",
+		height: "100%",
+		justifyContent: "center",
+		alignItems: "center",
 	},
 	// Content
 	contentCard: {
