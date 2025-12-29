@@ -67,8 +67,7 @@ function AppLoadingSkeleton() {
 
 export default function RootLayoutNav() {
 	const [isInitialized, setIsInitialized] = useState(false);
-	const { data: session, isPending } = authClient.useSession();
-	const previousUserIdRef = useRef<string | null>(null);
+	const { isPending } = authClient.useSession();
 
 	useEffect(() => {
 		// Initialize app
@@ -82,21 +81,6 @@ export default function RootLayoutNav() {
 
 		init();
 	}, []);
-
-	// Clear cache when user changes (sign in/out or switch accounts)
-	useEffect(() => {
-		const currentUserId = session?.user?.id ?? null;
-
-		// Only clear if we had a previous user (not on initial load)
-		if (
-			previousUserIdRef.current !== null &&
-			previousUserIdRef.current !== currentUserId
-		) {
-			queryClient.clear();
-		}
-
-		previousUserIdRef.current = currentUserId;
-	}, [session?.user?.id]);
 
 	// Listen for deep links (OAuth callbacks) - Better Auth handles this automatically
 	// This is just for debugging

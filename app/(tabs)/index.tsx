@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Search, X } from "react-native-feather";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { RecommendationRails } from "@/components/recommendation-rail";
 import { TrendingMedia } from "@/components/trending-media";
 import { $api } from "@/lib/api";
 
@@ -357,7 +358,7 @@ const App = () => {
 			<ScrollView
 				style={styles.scrollView}
 				showsVerticalScrollIndicator={false}
-				keyboardShouldPersistTaps="handled"
+				keyboardShouldPersistTaps="always"
 			>
 				{/* Search Bar */}
 				<View style={styles.searchBarWrapper}>
@@ -377,7 +378,7 @@ const App = () => {
 							onChangeText={setSearchQuery}
 							keyboardAppearance="dark"
 							selectionColor="#b14aed"
-							returnKeyType="done"
+							returnKeyType="search"
 						/>
 						{searchQuery.length > 0 && (
 							<Pressable onPress={clearSearch} style={styles.clearButton}>
@@ -443,6 +444,9 @@ const App = () => {
 						<TrendingMedia mediaType="movie" title="Movies" />
 					</>
 				)}
+
+				{/* Personalized Recommendations */}
+				{!isSearchActive && <RecommendationRails />}
 
 				<View style={{ height: 100 }} />
 			</ScrollView>

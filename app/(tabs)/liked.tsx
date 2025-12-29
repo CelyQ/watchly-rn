@@ -14,7 +14,7 @@ import {
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { $api, createQueryKey, fetchClient } from "@/lib/api";
+import { $api, fetchClient } from "@/lib/api";
 
 const HEADER_HEIGHT = 60;
 const CARD_WIDTH = 120;
@@ -236,7 +236,7 @@ const Index = () => {
 				mediaType: "movie" | "tv";
 				createdAt: string | number | Record<string, never>;
 			}) => ({
-				queryKey: createQueryKey("title-details", like.imdbId),
+				queryKey: ["title-details", like.imdbId],
 				queryFn: async () => {
 					const result = await fetchClient.GET(
 						"/api/v1/media/getTitleDetails",

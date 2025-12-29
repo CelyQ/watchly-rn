@@ -308,6 +308,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/media/getMoreLikeThis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiV1MediaGetMoreLikeThis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/getKeywords": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiV1MediaGetKeywords"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/getGenres": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiV1MediaGetGenres"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/getRecommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiV1MediaGetRecommendations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/notInterested": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiV1MediaNotInterested"];
+        put?: never;
+        post: operations["postApiV1MediaNotInterested"];
+        delete: operations["deleteApiV1MediaNotInterested"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -762,7 +842,7 @@ export interface operations {
     getApiV1MediaGetMostPopular: {
         parameters: {
             query?: {
-                limit?: string | number;
+                limit?: number;
                 mediaType?: "movie" | "tv" | "all";
             };
             header?: never;
@@ -871,217 +951,7 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Response for status 200 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        title: {
-                            /** @constant */
-                            __typename?: "Title";
-                            id: string;
-                            titleText?: {
-                                text: string;
-                                isOriginalTitle?: boolean;
-                            };
-                            originalTitleText?: {
-                                text: string;
-                                isOriginalTitle?: boolean;
-                            };
-                            releaseYear?: {
-                                /** @constant */
-                                __typename?: "YearRange";
-                                year: number;
-                                endYear: number | null;
-                            };
-                            releaseDate?: {
-                                /** @constant */
-                                __typename?: "ReleaseDate";
-                                month?: number;
-                                day?: number;
-                                year?: number;
-                                country?: {
-                                    id: string;
-                                };
-                                restriction: string | null;
-                                attributes?: {
-                                    id: string;
-                                    text: string;
-                                }[];
-                                displayableProperty?: {
-                                    qualifiersInMarkdownList: string[] | null;
-                                };
-                            };
-                            titleType?: {
-                                /** @constant */
-                                __typename?: "TitleType";
-                                id: string;
-                                text: string;
-                                categories?: {
-                                    id: string;
-                                    text: string;
-                                    value: string;
-                                }[];
-                                canHaveEpisodes?: boolean;
-                                isEpisode?: boolean;
-                                isSeries?: boolean;
-                                displayableProperty?: {
-                                    value: {
-                                        plainText: string;
-                                    };
-                                };
-                            };
-                            primaryImage?: {
-                                /** @constant */
-                                __typename?: "Image";
-                                id: string;
-                                url: string;
-                                height: number;
-                                width: number;
-                            };
-                            runtime?: {
-                                seconds: number;
-                            } | null;
-                            akas?: {
-                                /** @constant */
-                                __typename?: "AkaConnection";
-                                edges: {
-                                    node: {
-                                        attributes: {
-                                            id: string;
-                                            text: string;
-                                        }[];
-                                        country: {
-                                            /** @constant */
-                                            __typename?: "DisplayableCountry";
-                                            id: string;
-                                            text: string;
-                                        } | null;
-                                        language: {
-                                            /** @constant */
-                                            __typename: "DisplayableLanguage";
-                                            id: string;
-                                            text: string;
-                                        } | null;
-                                        displayableProperty: {
-                                            /** @constant */
-                                            __typename?: "DisplayableTitleAkaProperty";
-                                            value: {
-                                                id: string;
-                                                plainText: string;
-                                            };
-                                        };
-                                    };
-                                }[];
-                                pageInfo?: {
-                                    /** @constant */
-                                    __typename?: "PageInfo";
-                                    hasNextPage: boolean;
-                                    hasPreviousPage: boolean;
-                                    startCursor: string | null;
-                                    endCursor: string | null;
-                                };
-                                total?: number;
-                            };
-                            alternateVersions?: {
-                                /** @constant */
-                                __typename?: "AlternateVersionConnection";
-                                edges: {
-                                    [key: string]: unknown;
-                                }[];
-                                total: number;
-                                pageInfo?: {
-                                    /** @constant */
-                                    __typename?: "PageInfo";
-                                    hasNextPage: boolean;
-                                    hasPreviousPage: boolean;
-                                    startCursor: string | null;
-                                    endCursor: string | null;
-                                };
-                            };
-                            countriesOfOrigin?: {
-                                countries: {
-                                    /** @constant */
-                                    __typename?: "CountryOfOrigin";
-                                    id: string;
-                                    text: string;
-                                }[];
-                            };
-                            filmingLocations?: {
-                                /** @constant */
-                                __typename?: "FilmingLocationConnection";
-                                pageInfo?: {
-                                    /** @constant */
-                                    __typename?: "PageInfo";
-                                    hasNextPage: boolean;
-                                    hasPreviousPage: boolean;
-                                    startCursor: string | null;
-                                    endCursor: string | null;
-                                };
-                                total: number;
-                                edges: {
-                                    node: {
-                                        id: string;
-                                        displayableProperty: {
-                                            /** @constant */
-                                            __typename?: "DisplayableTitleFilmingLocationProperty";
-                                            value: {
-                                                id: string;
-                                                plainText: string;
-                                            };
-                                        };
-                                        attributes: {
-                                            text: string;
-                                        }[];
-                                        interestScore?: {
-                                            /** @constant */
-                                            __typename?: "InterestScore";
-                                            usersInterested: number;
-                                            usersVoted: number;
-                                        };
-                                    };
-                                }[];
-                            };
-                            officialLinks?: {
-                                edges: {
-                                    node: {
-                                        /** @constant */
-                                        __typename?: "ExternalLink";
-                                        url: string;
-                                        label: string;
-                                        externalLinkRegion: {
-                                            /** @constant */
-                                            __typename?: "DisplayableCountry";
-                                            id: string;
-                                            text: string;
-                                        } | null;
-                                    };
-                                }[];
-                            };
-                            spokenLanguages?: {
-                                spokenLanguages: {
-                                    /** @constant */
-                                    __typename?: "SpokenLanguage";
-                                    id: string;
-                                    text: string;
-                                    displayableProperty?: {
-                                        /** @constant */
-                                        __typename?: "DisplayableTitleSpokenLanguageProperty";
-                                        value: {
-                                            id: string;
-                                            plainText: string;
-                                        };
-                                    };
-                                }[];
-                            };
-                        };
-                    };
-                };
-            };
-        };
+        responses: never;
     };
     getApiV1MediaGetTitleEpisodes: {
         parameters: {
@@ -1453,7 +1323,7 @@ export interface operations {
         parameters: {
             query: {
                 tt: string;
-                seasonNumber: string | number;
+                seasonNumber: number;
             };
             header?: never;
             path?: never;
@@ -1488,7 +1358,7 @@ export interface operations {
         parameters: {
             query: {
                 query: string;
-                page: string | number;
+                page: number;
             };
             header?: never;
             path?: never;
@@ -1595,6 +1465,273 @@ export interface operations {
                                 }[];
                             };
                         };
+                    };
+                };
+            };
+        };
+    };
+    getApiV1MediaGetMoreLikeThis: {
+        parameters: {
+            query: {
+                tt: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        title: {
+                            moreLikeThisTitles: {
+                                edges: {
+                                    node: {
+                                        id: string;
+                                    };
+                                }[];
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+    getApiV1MediaGetKeywords: {
+        parameters: {
+            query: {
+                tt: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        title: {
+                            id: string;
+                            titleType: {
+                                id: string;
+                            };
+                            keywordItemCategories: {
+                                itemCategory: {
+                                    id: string;
+                                    itemCategoryId: string;
+                                    text: string;
+                                };
+                                keywords: {
+                                    /** @constant */
+                                    __typename: "TitleKeywordConnection";
+                                    total: number;
+                                    edges: {
+                                        node: {
+                                            keyword: {
+                                                id: string;
+                                                text: {
+                                                    text: string;
+                                                };
+                                                category: {
+                                                    id: string;
+                                                } | null;
+                                            };
+                                        };
+                                    }[];
+                                };
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+    };
+    getApiV1MediaGetGenres: {
+        parameters: {
+            query: {
+                tt: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        title: {
+                            id: string;
+                            titleGenres: {
+                                genres: {
+                                    genre: {
+                                        genreId: string;
+                                        text: string;
+                                    };
+                                }[];
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+    getApiV1MediaGetRecommendations: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        sections: {
+                            /** @enum {string} */
+                            type: "because_you_liked" | "top_genres" | "trending";
+                            title: string;
+                            subtitle: string;
+                            recommendations: {
+                                id: string;
+                                titleText: {
+                                    text: string;
+                                };
+                                primaryImage: {
+                                    url: string;
+                                } | null;
+                                releaseYear: {
+                                    year: number;
+                                } | null;
+                                titleType: {
+                                    id: string;
+                                    isSeries: boolean;
+                                };
+                                score: number;
+                                matchedGenres: string[];
+                                matchedKeywords: string[];
+                                reason: string;
+                            }[];
+                        }[];
+                        topGenres: string[];
+                        hasProfile: boolean;
+                    };
+                };
+            };
+        };
+    };
+    getApiV1MediaNotInterested: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        notInterested: string[];
+                    };
+                };
+            };
+        };
+    };
+    postApiV1MediaNotInterested: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    imdbId: string;
+                    /** @enum {string} */
+                    mediaType: "movie" | "tv";
+                };
+                "application/x-www-form-urlencoded": {
+                    imdbId: string;
+                    /** @enum {string} */
+                    mediaType: "movie" | "tv";
+                };
+                "multipart/form-data": {
+                    imdbId: string;
+                    /** @enum {string} */
+                    mediaType: "movie" | "tv";
+                };
+            };
+        };
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                    };
+                };
+            };
+        };
+    };
+    deleteApiV1MediaNotInterested: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    imdbId: string;
+                };
+                "application/x-www-form-urlencoded": {
+                    imdbId: string;
+                };
+                "multipart/form-data": {
+                    imdbId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Response for status 200 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
                     };
                 };
             };

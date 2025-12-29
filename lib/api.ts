@@ -17,9 +17,4 @@ fetchClient.use({
 	},
 });
 
-// Helper to create query keys for custom useQuery calls
-export function createQueryKey(...parts: unknown[]): unknown[] {
-	return parts;
-}
-
 export const $api = createClient(fetchClient);

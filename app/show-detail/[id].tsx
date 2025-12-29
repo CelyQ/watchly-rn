@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { getLocales } from "expo-localization";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { FC } from "react";
@@ -12,12 +12,13 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
-import { ArrowLeft, Heart } from "react-native-feather";
+import { ArrowLeft, Heart, XOctagon } from "react-native-feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { queryClient } from "@/app/_layout";
 import { SeasonCard } from "@/components/season-card";
 import { ShowDetailSkeleton } from "@/components/show-detail-skeleton";
 import { $api, fetchClient } from "@/lib/api";
+import { addNotInterested, removeNotInterested } from "@/lib/not-interested";
 
 // Get user's region code for watch providers
 const userRegion = getLocales()[0]?.regionCode ?? "US";
@@ -108,6 +109,18 @@ const ShowDetail: FC = () => {
 	const isLiked = likedData?.liked ?? false;
 	const [watched, setWatched] = useState(false);
 	const [isRemovingFromWatched, setIsRemovingFromWatched] = useState(false);
+	const [isTogglingNotInterested, setIsTogglingNotInterested] = useState(false);
+
+	// Fetch not interested list from API
+	const { data: notInterestedData } = $api.useQuery(
+		"get",
+		"/api/v1/media/notInterested",
+	);
+
+	// Check if this item is in the not interested list
+	const isNotInterested = useMemo(() => {
+		return notInterestedData?.notInterested?.includes(imdbId) ?? false;
+	}, [notInterestedData?.notInterested, imdbId]);
 
 	const { mutateAsync: toggleLike, isPending: isTogglingLike } =
 		$api.useMutation("post", "/api/v1/likes/toggle");
@@ -126,6 +139,9 @@ const ShowDetail: FC = () => {
 			queryClient.invalidateQueries({
 				queryKey: ["get", "/api/v1/progress/all"],
 			});
+			queryClient.invalidateQueries({
+				queryKey: ["my-movies"],
+			});
 		},
 	});
 
@@ -141,6 +157,9 @@ const ShowDetail: FC = () => {
 			queryClient.invalidateQueries({
 				queryKey: ["get", "/api/v1/progress/tv"],
 			});
+			queryClient.invalidateQueries({
+				queryKey: ["my-shows"],
+			});
 		},
 	});
 
@@ -155,6 +174,9 @@ const ShowDetail: FC = () => {
 				});
 				queryClient.invalidateQueries({
 					queryKey: ["get", "/api/v1/progress/tv"],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["my-shows"],
 				});
 			},
 		},
@@ -342,10 +364,73 @@ const ShowDetail: FC = () => {
 					},
 				},
 			});
-			return result.data;
+			return result.data ?? null;
 		},
 		enabled: shouldFetchSeasons,
 	});
+
+	// Fetch more like this recommendations
+	const { data: moreLikeThisData } = $api.useQuery(
+		"get",
+		"/api/v1/media/getMoreLikeThis",
+		{
+			params: {
+				query: {
+					tt: imdbId,
+				},
+			},
+		},
+		{
+			enabled: !isLoading && details !== undefined,
+		},
+	);
+
+	// Extract recommendation IDs
+	const recommendationIds = useMemo(() => {
+		const edges = moreLikeThisData?.title?.moreLikeThisTitles?.edges ?? [];
+		return edges.map((edge) => edge.node.id).slice(0, 12);
+	}, [moreLikeThisData]);
+
+	// Define recommendation title type
+	type RecommendationTitle = {
+		id: string;
+		titleText?: { text: string };
+		primaryImage?: { url: string };
+		releaseYear?: { year: number; endYear?: number | null };
+		titleType?: { isSeries?: boolean };
+	};
+
+	// Fetch details for each recommendation
+	const recommendationQueries = useQueries({
+		queries: recommendationIds.map((id) => ({
+			queryKey: ["get", "/api/v1/media/getTitleDetails", { tt: id }],
+			queryFn: async () => {
+				const result = await fetchClient.GET("/api/v1/media/getTitleDetails", {
+					params: {
+						query: {
+							tt: id,
+						},
+					},
+				});
+				// Return empty object if data is undefined to satisfy React Query
+				return (
+					(result.data as { title?: RecommendationTitle } | undefined) ?? {}
+				);
+			},
+			enabled: recommendationIds.length > 0,
+		})),
+	});
+
+	const recommendations = useMemo(() => {
+		return recommendationQueries
+			.filter((q) => q.isSuccess && q.data?.title)
+			.map((q) => q.data?.title)
+			.filter((t): t is RecommendationTitle => t !== undefined);
+	}, [recommendationQueries]);
+
+	const isLoadingRecommendations =
+		recommendationIds.length > 0 &&
+		recommendationQueries.some((q) => q.isLoading);
 
 	const plot = plotData?.title?.plot;
 	const castTitle = castData?.title;
@@ -443,6 +528,34 @@ const ShowDetail: FC = () => {
 		refetchLiked();
 	};
 
+	const handleToggleNotInterested = async () => {
+		setIsTogglingNotInterested(true);
+		const mediaType = isSeries ? "tv" : "movie";
+
+		try {
+			let success = false;
+			if (isNotInterested) {
+				success = await removeNotInterested(imdbId);
+			} else {
+				success = await addNotInterested(imdbId, mediaType);
+			}
+
+			if (success) {
+				// Invalidate queries to refresh data
+				queryClient.invalidateQueries({
+					queryKey: ["get", "/api/v1/media/notInterested"],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["get", "/api/v1/media/getRecommendations"],
+				});
+			}
+		} catch (error) {
+			console.error("Failed to toggle not interested:", error);
+		} finally {
+			setIsTogglingNotInterested(false);
+		}
+	};
+
 	// Parallax animations
 	// Image scale - stretches when pulling down
 	const imageScale = scrollY.interpolate({
@@ -512,8 +625,7 @@ const ShowDetail: FC = () => {
 					{ paddingTop: insets.top },
 					{ opacity: headerOpacity },
 				]}
-				pointerEvents="auto"
-				collapsable={false}
+				pointerEvents="box-none"
 			>
 				<Animated.View
 					style={[
@@ -526,16 +638,10 @@ const ShowDetail: FC = () => {
 				<TouchableOpacity
 					style={styles.headerBackButton}
 					onPress={() => router.back()}
-					onPressIn={() => {}}
-					onPressOut={() => {}}
-					delayPressIn={0}
-					delayPressOut={0}
 					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 					activeOpacity={0.7}
 				>
-					<View style={styles.backButtonContent} pointerEvents="none">
-						<ArrowLeft stroke="#fff" width={24} height={24} />
-					</View>
+					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
 				<Text style={styles.headerTitle} numberOfLines={1}>
 					{data?.titleText?.text}
@@ -550,22 +656,15 @@ const ShowDetail: FC = () => {
 					{ top: insets.top + 10 },
 					{ opacity: imageBackButtonOpacity },
 				]}
-				pointerEvents="auto"
-				collapsable={false}
+				pointerEvents="box-none"
 			>
 				<TouchableOpacity
 					style={styles.floatingBackButtonInner}
 					onPress={() => router.back()}
-					onPressIn={() => {}}
-					onPressOut={() => {}}
-					delayPressIn={0}
-					delayPressOut={0}
 					hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
 					activeOpacity={0.7}
 				>
-					<View style={styles.backButtonContent} pointerEvents="none">
-						<ArrowLeft stroke="#fff" width={24} height={24} />
-					</View>
+					<ArrowLeft stroke="#fff" width={24} height={24} />
 				</TouchableOpacity>
 			</Animated.View>
 
@@ -576,27 +675,19 @@ const ShowDetail: FC = () => {
 					{ top: insets.top + 10, right: 16 },
 					{ opacity: imageBackButtonOpacity },
 				]}
-				pointerEvents="auto"
-				collapsable={false}
+				pointerEvents="box-none"
 			>
-				<TouchableOpacity
-					style={[
-						styles.likeButton,
-						isLiked && styles.likeButtonActive,
-						styles.floatingLikeButtonInner,
-					]}
-					onPress={handleToggleLike}
-					onPressIn={() => {}}
-					onPressOut={() => {}}
-					delayPressIn={0}
-					delayPressOut={0}
-					disabled={isTogglingLike}
-					hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-					activeOpacity={0.7}
-				>
-					<Animated.View
-						style={[styles.likeButtonContent, { opacity: pulseAnim }]}
-						pointerEvents="none"
+				<Animated.View style={{ opacity: pulseAnim }} pointerEvents="box-none">
+					<TouchableOpacity
+						style={[
+							styles.likeButton,
+							isLiked && styles.likeButtonActive,
+							styles.floatingLikeButtonInner,
+						]}
+						onPress={handleToggleLike}
+						disabled={isTogglingLike}
+						hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+						activeOpacity={0.7}
 					>
 						<Heart
 							stroke={isLiked ? "#fff" : "#b14aed"}
@@ -604,8 +695,8 @@ const ShowDetail: FC = () => {
 							height={22}
 							fill={isLiked ? "#fff" : "none"}
 						/>
-					</Animated.View>
-				</TouchableOpacity>
+					</TouchableOpacity>
+				</Animated.View>
 			</Animated.View>
 
 			{/* Scrollable Content */}
@@ -618,7 +709,7 @@ const ShowDetail: FC = () => {
 				)}
 				scrollEventThrottle={16}
 				showsVerticalScrollIndicator={false}
-				keyboardShouldPersistTaps="handled"
+				keyboardShouldPersistTaps="always"
 			>
 				{/* Spacer for hero image */}
 				<View style={{ height: HEADER_HEIGHT - 80 }} />
@@ -699,6 +790,32 @@ const ShowDetail: FC = () => {
 										</Text>
 									</TouchableOpacity>
 								))}
+
+							{/* Remove from Don't Recommend Button - only show if item is marked */}
+							{!isLoading && isNotInterested && (
+								<TouchableOpacity
+									style={[
+										styles.notInterestedButton,
+										styles.notInterestedButtonActive,
+										isTogglingNotInterested && styles.actionButtonDisabled,
+									]}
+									onPress={() => void handleToggleNotInterested()}
+									disabled={isTogglingNotInterested}
+									activeOpacity={0.7}
+								>
+									<XOctagon stroke="#fff" width={18} height={18} />
+									<Text
+										style={[
+											styles.notInterestedButtonText,
+											styles.notInterestedButtonTextActive,
+										]}
+									>
+										{isTogglingNotInterested
+											? "Updating..."
+											: "Won't recommend this"}
+									</Text>
+								</TouchableOpacity>
+							)}
 
 							{/* Watch Providers Section */}
 							{watchProvidersData?.results?.[userRegion] && (
@@ -900,6 +1017,73 @@ const ShowDetail: FC = () => {
 										</Animated.ScrollView>
 									</View>
 								)}
+
+							{/* More Like This Section */}
+							{(isLoadingRecommendations || recommendations.length > 0) && (
+								<View style={styles.section}>
+									<Text style={styles.sectionTitle}>More Like This</Text>
+									<Animated.ScrollView
+										horizontal
+										showsHorizontalScrollIndicator={false}
+										contentContainerStyle={styles.horizontalScroll}
+									>
+										{isLoadingRecommendations
+											? Array.from({ length: 4 }).map((_, i) => (
+													<View
+														key={`skeleton-${i}`}
+														style={styles.recommendationItem}
+													>
+														<View style={styles.recommendationImageSkeleton} />
+														<View style={styles.recommendationTitleSkeleton} />
+													</View>
+												))
+											: recommendations.map((rec) => (
+													<TouchableOpacity
+														key={rec.id}
+														style={styles.recommendationItem}
+														onPress={() =>
+															router.push({
+																pathname: "/show-detail/[id]",
+																params: { id: rec.id },
+															})
+														}
+														activeOpacity={0.7}
+													>
+														{rec.primaryImage?.url ? (
+															<Image
+																source={{ uri: rec.primaryImage.url }}
+																style={styles.recommendationImage}
+															/>
+														) : (
+															<View
+																style={[
+																	styles.recommendationImage,
+																	styles.recommendationPlaceholder,
+																]}
+															>
+																<Text
+																	style={styles.recommendationPlaceholderText}
+																>
+																	{rec.titleText?.text?.[0] ?? "?"}
+																</Text>
+															</View>
+														)}
+														<Text
+															style={styles.recommendationTitle}
+															numberOfLines={2}
+														>
+															{rec.titleText?.text}
+														</Text>
+														{rec.releaseYear?.year && (
+															<Text style={styles.recommendationYear}>
+																{rec.releaseYear.year}
+															</Text>
+														)}
+													</TouchableOpacity>
+												))}
+									</Animated.ScrollView>
+								</View>
+							)}
 						</>
 					)}
 				</View>
@@ -968,12 +1152,6 @@ const styles = StyleSheet.create({
 		alignItems: "center",
 		zIndex: 25,
 	},
-	backButtonContent: {
-		width: "100%",
-		height: "100%",
-		justifyContent: "center",
-		alignItems: "center",
-	},
 	headerTitle: {
 		flex: 1,
 		color: "#fff",
@@ -1009,12 +1187,6 @@ const styles = StyleSheet.create({
 		width: 48,
 		height: 48,
 		borderRadius: 24,
-	},
-	likeButtonContent: {
-		width: "100%",
-		height: "100%",
-		justifyContent: "center",
-		alignItems: "center",
 	},
 	// Content
 	contentCard: {
@@ -1210,6 +1382,77 @@ const styles = StyleSheet.create({
 		width: 80,
 		height: 16,
 		opacity: 0.6,
+	},
+	// Recommendations
+	recommendationItem: {
+		width: 120,
+		marginRight: 14,
+	},
+	recommendationImage: {
+		width: 120,
+		height: 180,
+		borderRadius: 12,
+		backgroundColor: "#1a1a1a",
+	},
+	recommendationPlaceholder: {
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	recommendationPlaceholderText: {
+		color: "#444",
+		fontSize: 36,
+		fontWeight: "bold",
+	},
+	recommendationTitle: {
+		color: "#fff",
+		fontSize: 13,
+		fontWeight: "600",
+		marginTop: 10,
+		lineHeight: 18,
+	},
+	recommendationYear: {
+		color: "#666",
+		fontSize: 12,
+		marginTop: 2,
+	},
+	recommendationImageSkeleton: {
+		width: 120,
+		height: 180,
+		borderRadius: 12,
+		backgroundColor: "#1a1a1a",
+	},
+	recommendationTitleSkeleton: {
+		width: 90,
+		height: 14,
+		borderRadius: 4,
+		backgroundColor: "#1a1a1a",
+		marginTop: 10,
+	},
+	// Not Interested Button
+	notInterestedButton: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "center",
+		backgroundColor: "transparent",
+		borderRadius: 10,
+		paddingVertical: 12,
+		paddingHorizontal: 16,
+		marginBottom: 24,
+		borderWidth: 1,
+		borderColor: "#333",
+		gap: 8,
+	},
+	notInterestedButtonActive: {
+		backgroundColor: "rgba(220, 38, 38, 0.15)",
+		borderColor: "#dc2626",
+	},
+	notInterestedButtonText: {
+		color: "#888",
+		fontSize: 14,
+		fontWeight: "600",
+	},
+	notInterestedButtonTextActive: {
+		color: "#dc2626",
 	},
 });
 

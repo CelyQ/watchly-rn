@@ -13,7 +13,7 @@ import {
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { $api, createQueryKey, fetchClient } from "@/lib/api";
+import { $api, fetchClient } from "@/lib/api";
 
 const HEADER_HEIGHT = 60;
 const CARD_WIDTH = 120;
@@ -47,14 +47,12 @@ const TvProgressCard = ({
 	item,
 	onPress,
 	showProgress = true,
-	isLoadingDetails = false,
 }: {
 	item: TvShow;
 	onPress: () => void;
 	showProgress?: boolean;
-	isLoadingDetails?: boolean;
 }) => {
-	const titleText = item.title ?? (isLoadingDetails ? "Loading..." : "");
+	const titleText = item.title ?? "Unknown";
 	const imageUrl = item.posterUrl;
 	const progress =
 		item.totalEpisodes > 0 ? item.watchedEpisodes / item.totalEpisodes : 0;
@@ -122,16 +120,8 @@ const TvProgressCard = ({
 };
 
 // Movie card (simpler, no progress info)
-const MovieCard = ({
-	item,
-	onPress,
-	isLoadingDetails = false,
-}: {
-	item: Movie;
-	onPress: () => void;
-	isLoadingDetails?: boolean;
-}) => {
-	const titleText = item.title ?? (isLoadingDetails ? "Loading..." : "");
+const MovieCard = ({ item, onPress }: { item: Movie; onPress: () => void }) => {
+	const titleText = item.title ?? "Unknown";
 	const imageUrl = item.posterUrl;
 
 	return (
@@ -210,8 +200,8 @@ const Index = () => {
 	const movies = (progressData?.movies ?? []) as Movie[];
 	const tvShows = (progressData?.tvShows ?? []) as TvShow[];
 
-	// Get imdbIds that are missing title/posterUrl (need fallback fetch)
-	const imdbIdsMissingDetails = useMemo(() => {
+	// Get all unique imdbIds that need title details (missing title or posterUrl)
+	const allImdbIds = useMemo(() => {
 		const ids = new Set<string>();
 		tvShows.forEach((show) => {
 			if (!show.title || !show.posterUrl) {
@@ -226,46 +216,43 @@ const Index = () => {
 		return Array.from(ids);
 	}, [tvShows, movies]);
 
-	// Fetch title details only for items missing data
+	// Fetch title details for ALL items that need them (React Query handles caching)
+	// Use unique query key "progress-title-details" to avoid conflicts with liked.tsx
 	const detailQueries = useQueries({
-		queries: imdbIdsMissingDetails.map((imdbId) => ({
-			queryKey: createQueryKey("progress-title-details", imdbId),
+		queries: allImdbIds.map((imdbId) => ({
+			queryKey: ["progress-title-details", imdbId],
 			queryFn: async () => {
 				const result = await fetchClient.GET("/api/v1/media/getTitleDetails", {
 					params: { query: { tt: imdbId } },
 				});
-				const title = result.data?.title?.titleText?.text ?? null;
-				const posterUrl = result.data?.title?.primaryImage?.url ?? null;
-				return { imdbId, title, posterUrl };
+				return {
+					imdbId,
+					title: result.data?.title?.titleText?.text ?? null,
+					posterUrl: result.data?.title?.primaryImage?.url ?? null,
+				};
 			},
-			enabled: !!imdbId,
+			enabled: allImdbIds.length > 0,
 			retry: 2,
-			staleTime: 1000 * 60 * 5,
-			gcTime: 1000 * 60 * 30,
+			staleTime: 1000 * 60 * 60, // Cache for 1 hour
+			gcTime: 1000 * 60 * 60 * 24, // Keep in memory for 24 hours
 		})),
 	});
 
-	// Check if any detail queries are still loading
-	const isLoadingDetails = detailQueries.some((q) => q.isLoading);
-
-	// Create lookup map for fallback data
-	const fallbackDetailsMap = useMemo(() => {
-		const map = new Map<
-			string,
-			{ title: string | null; posterUrl: string | null }
-		>();
-		for (const query of detailQueries) {
-			if (query.isSuccess && query.data?.imdbId) {
+	// Create a lookup map from the query results
+	const detailsMap = useMemo(() => {
+		const map = new Map<string, { title: string | null; posterUrl: string | null }>();
+		detailQueries.forEach((query) => {
+			if (query.data?.imdbId) {
 				map.set(query.data.imdbId, {
 					title: query.data.title,
 					posterUrl: query.data.posterUrl,
 				});
 			}
-		}
+		});
 		return map;
 	}, [detailQueries]);
 
-	// Categorize items into groups, enriching with fallback data if needed
+	// Categorize items into groups with enriched data
 	const { progressTvShows, finishedSeries, finishedMovies } = useMemo(() => {
 		const progressTv: TvShow[] = [];
 		const finishedTv: TvShow[] = [];
@@ -273,11 +260,11 @@ const Index = () => {
 
 		// Categorize TV shows
 		tvShows.forEach((show) => {
-			const fallback = fallbackDetailsMap.get(show.imdbId);
+			const details = detailsMap.get(show.imdbId);
 			const enrichedShow: TvShow = {
 				...show,
-				title: show.title ?? fallback?.title ?? null,
-				posterUrl: show.posterUrl ?? fallback?.posterUrl ?? null,
+				title: show.title ?? details?.title ?? null,
+				posterUrl: show.posterUrl ?? details?.posterUrl ?? null,
 			};
 
 			if (show.isFullyWatched) {
@@ -290,11 +277,11 @@ const Index = () => {
 		// Categorize movies (only finished movies)
 		movies.forEach((movie) => {
 			if (movie.isWatched) {
-				const fallback = fallbackDetailsMap.get(movie.imdbId);
+				const details = detailsMap.get(movie.imdbId);
 				finishedMov.push({
 					...movie,
-					title: movie.title ?? fallback?.title ?? null,
-					posterUrl: movie.posterUrl ?? fallback?.posterUrl ?? null,
+					title: movie.title ?? details?.title ?? null,
+					posterUrl: movie.posterUrl ?? details?.posterUrl ?? null,
 				});
 			}
 		});
@@ -304,7 +291,7 @@ const Index = () => {
 			finishedSeries: finishedTv,
 			finishedMovies: finishedMov,
 		};
-	}, [movies, tvShows, fallbackDetailsMap]);
+	}, [movies, tvShows, detailsMap]);
 
 	const renderTvShowSection = (
 		label: string,
@@ -349,7 +336,6 @@ const Index = () => {
 								key={`${item.imdbId}-${i}`}
 								item={item}
 								showProgress={showProgress}
-								isLoadingDetails={!item.title && isLoadingDetails}
 								onPress={() =>
 									router.push({
 										pathname: "/show-detail/[id]",
@@ -404,7 +390,6 @@ const Index = () => {
 							<MovieCard
 								key={`${item.imdbId}-${i}`}
 								item={item}
-								isLoadingDetails={!item.title && isLoadingDetails}
 								onPress={() =>
 									router.push({
 										pathname: "/show-detail/[id]",
