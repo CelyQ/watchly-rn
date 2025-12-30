@@ -29,6 +29,7 @@
 			}
 		},
 		"android": {
+			"jsEngine": "hermes",
 			"adaptiveIcon": {
 				"foregroundImage": "./assets/playstore.png",
 				"backgroundColor": "#000000"
@@ -36,7 +37,18 @@
 			"package": "com.popmann.watchly",
 			"theme": {
 				"android:windowBackground": "@android:color/black"
-			}
+			},
+			"intentFilters": [
+				{
+					"action": "VIEW",
+					"data": [
+						{
+							"scheme": "watchly-rn"
+						}
+					],
+					"category": ["BROWSABLE", "DEFAULT"]
+				}
+			]
 		},
 		"plugins": [
 			"expo-router",

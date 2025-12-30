@@ -3,14 +3,13 @@
 	"version": "1.0.0",
 	"main": "expo-router/entry",
 	"scripts": {
-		"start": "expo start",
 		"android": "expo start --android",
 		"ios": "expo start --ios",
-		"web": "expo start --web",
 		"format": "bunx biome format --write",
 		"generate-api-types": "bunx openapi-typescript http://localhost:3000/api/openapi/json -o ./types/api.ts",
-		"build": "eas build --platform ios --profile production --local",
-		"build:preview": "eas build --platform ios --profile preview"
+		"build:ios": "eas build --platform ios --profile production --local",
+		"build:preview:ios": "bunx eas-cli build --platform ios --profile preview",
+		"build:preview:android": "bunx eas-cli build --platform android --profile preview"
 	},
 	"dependencies": {
 		"@better-auth/expo": "^1.4.6",

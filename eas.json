@@ -9,20 +9,10 @@
 			"developmentClient": true,
 			"ios": {
 				"buildConfiguration": "Debug"
-			}
-		},
-		"preview": {
-			"distribution": "internal",
-			"autoIncrement": false,
-			"ios": {
-				"buildConfiguration": "Release"
-			}
-		},
-		"production": {
-			"distribution": "store",
-			"autoIncrement": true,
-			"ios": {
-				"buildConfiguration": "Release"
+			},
+			"android": {
+				"buildType": "apk",
+				"credentialsSource": "remote"
 			}
 		}
 	},

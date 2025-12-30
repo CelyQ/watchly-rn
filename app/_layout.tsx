@@ -2,11 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import { Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import { ErrorBoundary } from "react-error-boundary";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { authClient } from "@/lib/auth-client";
-
-const BACKEND_BASE_URL = process.env.EXPO_PUBLIC_BACKEND_BASE_URL;
 
 export const queryClient = new QueryClient({
 	defaultOptions: {
@@ -82,36 +81,79 @@ export default function RootLayoutNav() {
 		init();
 	}, []);
 
-	// Listen for deep links (OAuth callbacks) - Better Auth handles this automatically
-	// This is just for debugging
+	// Handle deep links (OAuth callbacks) - critical for Android
 	useEffect(() => {
-		const subscription = Linking.addEventListener("url", (event) => {
-			console.log("Deep link received:", event.url);
-			// Better Auth Expo client handles the session update automatically
+		const handleURL = async (url: string) => {
+			console.log("Processing deep link:", url);
+			// Better Auth Expo client should handle this automatically,
+			// but we ensure it's processed by checking the URL
+			if (url?.startsWith("watchly-rn://")) {
+				console.log("OAuth callback detected:", url);
+				// Force a session refresh to ensure Better Auth processes the callback
+				try {
+					await authClient.getSession();
+				} catch (error) {
+					console.error("Error refreshing session after callback:", error);
+				}
+			}
+		};
+
+		// Check for initial URL (when app is opened from a deep link)
+		const checkInitialURL = async () => {
+			try {
+				const initialURL = await Linking.getInitialURL();
+				if (initialURL) {
+					console.log("Initial URL received:", initialURL);
+					await handleURL(initialURL);
+				}
+			} catch (error) {
+				console.error("Error getting initial URL:", error);
+			}
+		};
+
+		// Check for URL when app comes back to foreground (critical for Android)
+		// Chrome blocks automatic redirects, so we need to check when app becomes active
+		const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+			if (nextAppState === "active") {
+				console.log("App became active, checking for deep link...");
+				// Re-check for initial URL when app comes to foreground
+				// This handles the case where Chrome redirects to the app
+				await checkInitialURL();
+				
+				// Also try to refresh session in case OAuth completed
+				// The server might have set cookies even if redirect was blocked
+				try {
+					console.log("Refreshing session after app became active...");
+					await authClient.getSession();
+				} catch (error) {
+					console.error("Error refreshing session:", error);
+				}
+			}
+		};
+
+		// Initial check
+		checkInitialURL();
+
+		// Listen for app state changes (when app comes back from background)
+		const appStateSubscription = AppState.addEventListener(
+			"change",
+			handleAppStateChange,
+		);
+
+		// Listen for deep links while app is running
+		const linkingSubscription = Linking.addEventListener("url", async (event) => {
+			console.log("Deep link received while running:", event.url);
+			await handleURL(event.url);
 		});
 
 		return () => {
-			subscription.remove();
+			appStateSubscription.remove();
+			linkingSubscription.remove();
 		};
 	}, []);
 
 	if (!isInitialized) {
 		return <AppLoadingSkeleton />;
-	}
-
-	if (!BACKEND_BASE_URL) {
-		return (
-			<View
-				style={{
-					flex: 1,
-					justifyContent: "center",
-					alignItems: "center",
-					backgroundColor: "#000",
-				}}
-			>
-				<Text style={{ color: "#fff" }}>Error: Missing Backend Base URL</Text>
-			</View>
-		);
 	}
 
 	return (
