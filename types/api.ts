@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/v1/billing/payment-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiV1BillingPayment-sheet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/likes/toggle": {
         parameters: {
             query?: never;
@@ -388,6 +404,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/webhook/stripe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiWebhookStripe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -400,6 +432,43 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "postApiV1BillingPayment-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    amount: number;
+                    currency?: string;
+                    connectedAccountId?: string;
+                    priceId?: string;
+                    plan?: string;
+                    annual?: boolean;
+                };
+                "application/x-www-form-urlencoded": {
+                    amount: number;
+                    currency?: string;
+                    connectedAccountId?: string;
+                    priceId?: string;
+                    plan?: string;
+                    annual?: boolean;
+                };
+                "multipart/form-data": {
+                    amount: number;
+                    currency?: string;
+                    connectedAccountId?: string;
+                    priceId?: string;
+                    plan?: string;
+                    annual?: boolean;
+                };
+            };
+        };
+        responses: never;
+    };
     postApiV1LikesToggle: {
         parameters: {
             query?: never;
@@ -1736,5 +1805,15 @@ export interface operations {
                 };
             };
         };
+    };
+    postApiWebhookStripe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: never;
     };
 }

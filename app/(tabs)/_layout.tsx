@@ -1,20 +1,68 @@
-import { Redirect, Tabs } from "expo-router";
+import {
+	Redirect,
+	Tabs,
+	useFocusEffect,
+	usePathname,
+	useRouter,
+} from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
+import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { Clock, Heart, Search, User } from "react-native-feather";
 import { authClient } from "@/lib/auth-client";
 
 export default function TabLayout() {
+	const router = useRouter();
+	const pathname = usePathname();
 	const { data: session, isPending } = authClient.useSession();
+	const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+	const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
+
+	const checkSubscription = useCallback(async () => {
+		try {
+			const { data: subscriptions } = await authClient.subscription.list();
+			console.log({ subscriptions });
+			const activeSubscription = subscriptions?.find(
+				(sub) => sub.status === "active" || sub.status === "trialing",
+			);
+			setHasActiveSubscription(!!activeSubscription);
+			setIsLoadingSubscription(false);
+		} catch (error) {
+			console.error("Error checking subscription:", error);
+			setIsLoadingSubscription(false);
+		}
+	}, []);
+
+	// Check subscription on mount
+	useEffect(() => {
+		void checkSubscription();
+	}, [checkSubscription]);
+
+	// Also check subscription when component gains focus (e.g., after returning from paywall)
+	useFocusEffect(
+		useCallback(() => {
+			void checkSubscription();
+		}, [checkSubscription]),
+	);
+
+	useEffect(() => {
+		if (hasActiveSubscription && pathname === "/paywall") {
+			router.replace("/");
+		}
+	}, [pathname, hasActiveSubscription, router]);
 
 	// While checking auth state, show nothing (root layout shows loading)
-	if (isPending) {
+	if (isPending || isLoadingSubscription) {
 		return null;
 	}
 
 	// If not authenticated, redirect to sign-in
 	if (!session?.user) {
 		return <Redirect href="/sign-in" />;
+	}
+
+	if (!hasActiveSubscription) {
+		return <Redirect href="/paywall" />;
 	}
 
 	// Use regular Tabs on Android, NativeTabs on iOS
