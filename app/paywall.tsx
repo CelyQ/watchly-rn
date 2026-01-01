@@ -21,7 +21,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
-	Platform,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
@@ -60,27 +59,102 @@ export default function Paywall() {
 	);
 	const hasProcessedRedirect = useRef(false);
 
-	// Helper function to close browser aggressively (especially for Android)
+	// Helper function to close browser
 	const closeBrowser = useCallback(async () => {
 		try {
 			await WebBrowser.dismissBrowser();
-			// On Android, sometimes we need to try multiple times
-			if (Platform.OS === "android") {
-				// Give it a moment and try again
-				await new Promise((resolve) => setTimeout(resolve, 100));
-				try {
-					await WebBrowser.dismissBrowser();
-				} catch {
-					// Ignore second attempt errors
-				}
-			}
-		} catch (error) {
+		} catch {
 			// Browser might already be closed, ignore error
-			console.log("Browser already closed or error dismissing:", error);
 		}
 		// Clear the browser reference
 		browserRef.current = null;
 	}, []);
+
+	// Handle subscription success - extracted so it can be called from multiple places
+	const handleSuccess = useCallback(async () => {
+		try {
+			// Prevent processing redirect multiple times
+			if (hasProcessedRedirect.current) {
+				return;
+			}
+
+			// Mark as processed to prevent re-processing
+			hasProcessedRedirect.current = true;
+
+			// Browser should already be closed, but ensure it's closed
+			// Don't block on this - close in background
+			closeBrowser().catch(() => {
+				// Ignore errors
+			});
+
+			// Poll for subscription status with retries
+			// Subscription might not be active immediately due to webhook processing
+			let retries = 0;
+			const maxRetries = 20; // Try for up to 10 seconds (20 * 500ms)
+			const checkInterval = 500; // Check every 500ms
+
+			const checkSubscription = async (): Promise<boolean> => {
+				try {
+					const { data: subscriptions } = await authClient.subscription.list();
+
+					const activeSubscription = subscriptions?.find(
+						(sub) => sub.status === "active" || sub.status === "trialing",
+					);
+
+					if (activeSubscription) {
+						router.replace("/");
+						return true;
+					}
+					return false;
+				} catch {
+					return false;
+				}
+			};
+
+			// Navigate immediately - the tabs layout will check subscription on focus
+			// and redirect back to paywall if not ready, but this gives it a chance to update
+			router.replace("/");
+
+			// Also check subscription in the background and navigate again if needed
+			// This handles the case where subscription becomes active after navigation
+			const found = await checkSubscription();
+			if (found) {
+				return;
+			}
+
+			// If not found, poll with retries in background
+			const pollSubscription = async () => {
+				retries++;
+
+				const found = await checkSubscription();
+				if (found) {
+					return;
+				}
+
+				if (retries < maxRetries) {
+					setTimeout(pollSubscription, checkInterval);
+				}
+			};
+
+			// Start polling in background
+			setTimeout(pollSubscription, checkInterval);
+		} catch {
+			// Still try to navigate
+			try {
+				router.replace("/");
+			} catch {
+				// Ignore navigation errors
+			}
+		}
+	}, [router, closeBrowser]);
+
+	const handleCancel = useCallback(async () => {
+		// Mark as processed to prevent re-processing
+		hasProcessedRedirect.current = true;
+
+		// User canceled - close browser and silently return
+		await closeBrowser();
+	}, [closeBrowser]);
 
 	// React Query mutation for subscription upgrade
 	const { mutateAsync: upgradeSubscription, isPending: isUpgrading } =
@@ -101,20 +175,16 @@ export default function Paywall() {
 				return data;
 			},
 			onError: (error: Error) => {
-				console.error("Subscription upgrade error:", error);
 				Alert.alert("Error", error.message || "Failed to create subscription");
 			},
 			onSuccess: async (data) => {
 				// Don't open browser if we're already processing a redirect
 				if (hasProcessedRedirect.current) {
-					console.log("Already processed redirect, skipping browser open");
 					return;
 				}
 
 				// Don't open browser if we already have success/cancel params
-				// This prevents reopening on Android when deep link redirects
 				if (params.success === "true" || params.canceled === "true") {
-					console.log("Redirect params already present, skipping browser open");
 					return;
 				}
 
@@ -123,137 +193,84 @@ export default function Paywall() {
 				const checkoutUrl = (data as { url?: string })?.url;
 
 				if (checkoutUrl && typeof checkoutUrl === "string") {
-					console.log("Opening Stripe Checkout:", checkoutUrl);
-					// Open the Stripe Checkout URL in the browser
-					// The deep link will redirect back to the app after payment
+					// Use openAuthSessionAsync for proper deep link handling
+					// This method is designed to handle redirects to custom URL schemes
+					// It properly handles the redirect from Stripe back to our app
 					try {
-						browserRef.current = await WebBrowser.openBrowserAsync(
+						const result = await WebBrowser.openAuthSessionAsync(
 							checkoutUrl,
-							{
-								showInRecents: true,
-							},
+							"watchly-rn://",
 						);
-					} catch (error) {
-						console.error("Error opening checkout URL:", error);
+
+						// Handle the redirect result directly
+						if (result.type === "success" && result.url) {
+							// Directly trigger the success handler when we get the success URL
+							if (result.url.includes("success=true")) {
+								void handleSuccess();
+							} else if (result.url.includes("canceled=true")) {
+								void handleCancel();
+							}
+						}
+					} catch {
 						Alert.alert(
 							"Error",
 							"Failed to open checkout page. Please try again.",
 						);
 					}
 				} else {
-					console.error("No checkout URL found in response:", data);
 					Alert.alert("Error", "Checkout URL not found. Please try again.");
 				}
 			},
 		});
 
-	// Handle redirect from Stripe Checkout
-	useEffect(() => {
-		// Prevent processing redirect multiple times
-		if (hasProcessedRedirect.current) {
-			return;
+	// Check for active subscription and redirect away from paywall if found
+	// This handles the case where subscription becomes active and user is still on paywall
+	const checkAndRedirect = useCallback(async () => {
+		try {
+			const { data: subscriptions } = await authClient.subscription.list();
+			const activeSubscription = subscriptions?.find(
+				(sub) => sub.status === "active" || sub.status === "trialing",
+			);
+			if (activeSubscription) {
+				router.replace("/");
+			}
+		} catch {
+			// Ignore errors
 		}
+	}, [router]);
 
-		const handleSuccess = async () => {
-			// Mark as processed to prevent re-processing
-			// Note: useFocusEffect might have already set this, but that's fine
-			hasProcessedRedirect.current = true;
+	useEffect(() => {
+		// Check on mount
+		void checkAndRedirect();
+	}, [checkAndRedirect]);
 
-			// Browser should already be closed by useFocusEffect, but ensure it's closed
-			await closeBrowser();
+	// Also check when component gains focus (e.g., after returning from browser)
+	useFocusEffect(() => {
+		void checkAndRedirect();
+	});
 
-			// On Android, add a longer delay to ensure browser is fully closed
-			// and app has fully loaded before processing the redirect
-			if (Platform.OS === "android") {
-				await new Promise((resolve) => setTimeout(resolve, 500));
-			}
-
-			// Refetch subscription list to update state
-			try {
-				const { data: subscriptions } = await authClient.subscription.list();
-				console.log("Refetched subscriptions after success:", subscriptions);
-
-				const activeSubscription = subscriptions?.find(
-					(sub) => sub.status === "active" || sub.status === "trialing",
-				);
-
-				if (activeSubscription) {
-					// Subscription is active, redirect to home
-					// The tabs layout will handle the redirect automatically
-					router.replace("/");
-				} else {
-					// Show success message but subscription might still be processing
-					Alert.alert(
-						"Success",
-						"Your subscription has been created! You'll receive access once payment is confirmed.",
-						[
-							{
-								text: "OK",
-								onPress: () => {
-									router.replace("/");
-								},
-							},
-						],
-					);
-				}
-			} catch (error) {
-				console.error("Error refetching subscriptions:", error);
-				// Still redirect even if refetch fails
-				Alert.alert(
-					"Success",
-					"Your subscription has been created! You'll receive access once payment is confirmed.",
-					[
-						{
-							text: "OK",
-							onPress: () => {
-								router.replace("/");
-							},
-						},
-					],
-				);
-			}
-		};
-
-		const handleCancel = async () => {
-			// Mark as processed to prevent re-processing
-			hasProcessedRedirect.current = true;
-
-			// User canceled - close browser and silently return
-			console.log("Subscription checkout was canceled");
-			await closeBrowser();
-		};
-
+	// Handle redirect from Stripe Checkout via URL params
+	useEffect(() => {
 		if (params.success === "true") {
 			void handleSuccess();
 		} else if (params.canceled === "true") {
 			void handleCancel();
 		}
-	}, [params.success, params.canceled, router, closeBrowser]);
+	}, [params.success, params.canceled, handleSuccess, handleCancel]);
 
 	// Close browser IMMEDIATELY when component gains focus with redirect params
 	// This must happen BEFORE any other processing to prevent browser from reopening
 	useFocusEffect(
 		useCallback(() => {
-			// If we have redirect params, close browser immediately and synchronously
+			// If we have redirect params, close browser immediately
 			if (params.success === "true" || params.canceled === "true") {
-				// Mark as processed immediately to prevent any other code from opening browser
-				hasProcessedRedirect.current = true;
+				// Don't mark as processed here - let the useEffect handle it
+				// This ensures the useEffect can still process the redirect
 
-				// Close browser immediately - don't wait for async operations
-				// On Android, this must happen synchronously to prevent browser from reopening
+				// Close browser immediately
 				WebBrowser.dismissBrowser().catch(() => {
 					// Ignore errors - browser might already be closed
 				});
-
-				// On Android, try multiple times to ensure it's closed
-				if (Platform.OS === "android") {
-					setTimeout(() => {
-						WebBrowser.dismissBrowser().catch(() => {});
-					}, 50);
-					setTimeout(() => {
-						WebBrowser.dismissBrowser().catch(() => {});
-					}, 150);
-				}
 			}
 		}, [params.success, params.canceled]),
 	);
@@ -278,8 +295,8 @@ export default function Paywall() {
 	const handleSignOut = async () => {
 		try {
 			await authClient.signOut();
-		} catch (err) {
-			console.error("Sign out error:", JSON.stringify(err, null, 2));
+		} catch {
+			// Ignore sign out errors
 		}
 	};
 
