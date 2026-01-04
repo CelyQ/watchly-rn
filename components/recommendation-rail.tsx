@@ -106,7 +106,6 @@ const RecommendationCard = ({
 								isNotInterested && styles.imageNotInterested,
 							]}
 							resizeMode="cover"
-							defaultSource={require("@/assets/1024.png")}
 						/>
 						{isNotInterested && (
 							<View style={styles.notInterestedOverlay}>

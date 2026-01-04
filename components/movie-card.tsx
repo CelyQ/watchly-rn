@@ -26,7 +26,6 @@ export const MovieCard = ({
 				source={{ uri: imageUrl }}
 				style={[styles.mediaCardImage, isWatched && styles.imageWatched]}
 				resizeMode="cover"
-				defaultSource={require("@/assets/1024.png")}
 			/>
 
 			{isWatched && (

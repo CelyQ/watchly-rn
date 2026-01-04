@@ -604,7 +604,6 @@ const ShowDetail: FC = () => {
 						source={{ uri: data.primaryImage.url }}
 						style={styles.heroImage}
 						resizeMode="cover"
-						defaultSource={require("@/assets/1024.png")}
 					/>
 				) : (
 					<View style={[styles.heroImage, styles.placeholderImage]}>
@@ -837,7 +836,6 @@ const ShowDetail: FC = () => {
 																		}}
 																		style={styles.providerLogo}
 																		resizeMode="contain"
-																		defaultSource={require("@/assets/1024.png")}
 																	/>
 																</View>
 																<Text
@@ -870,7 +868,6 @@ const ShowDetail: FC = () => {
 																		}}
 																		style={styles.providerLogo}
 																		resizeMode="contain"
-																		defaultSource={require("@/assets/1024.png")}
 																	/>
 																</View>
 																<Text
@@ -903,7 +900,6 @@ const ShowDetail: FC = () => {
 																		}}
 																		style={styles.providerLogo}
 																		resizeMode="contain"
-																		defaultSource={require("@/assets/1024.png")}
 																	/>
 																</View>
 																<Text
@@ -1000,7 +996,6 @@ const ShowDetail: FC = () => {
 															}}
 															style={styles.castImage}
 															resizeMode="cover"
-															defaultSource={require("@/assets/1024.png")}
 														/>
 														<Text style={styles.castName} numberOfLines={1}>
 															{cast.name.nameText.text}
@@ -1056,7 +1051,6 @@ const ShowDetail: FC = () => {
 																source={{ uri: rec.primaryImage.url }}
 																style={styles.recommendationImage}
 																resizeMode="cover"
-																defaultSource={require("@/assets/1024.png")}
 															/>
 														) : (
 															<View

@@ -74,7 +74,6 @@ const MediaCard = ({
 					progress?.isFullyWatched && styles.imageWatched,
 				]}
 				resizeMode="cover"
-				defaultSource={require("@/assets/1024.png")}
 			/>
 
 			{/* Progress bar (only for in-progress shows) */}

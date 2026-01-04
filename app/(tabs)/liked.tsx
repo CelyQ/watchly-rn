@@ -74,7 +74,6 @@ const TvMediaCard = ({
 						styles.mediaCardImage,
 						progress?.isFullyWatched && styles.imageWatched,
 					]}
-					defaultSource={require("@/assets/1024.png")}
 				/>
 			) : (
 				<View style={[styles.mediaCardImage, styles.imagePlaceholder]}>
@@ -154,7 +153,6 @@ const MovieMediaCard = ({
 					source={{ uri: imageUrl }}
 					style={[styles.mediaCardImage, isWatched && styles.imageWatched]}
 					resizeMode="cover"
-					defaultSource={require("@/assets/1024.png")}
 				/>
 			) : (
 				<View

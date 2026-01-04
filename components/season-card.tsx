@@ -57,7 +57,6 @@ export const SeasonCard: React.FC<SeasonCardProps> = ({
 						isWatched && styles.seasonPosterWatched,
 					]}
 					resizeMode="cover"
-					defaultSource={require("@/assets/1024.png")}
 				/>
 			) : (
 				<View

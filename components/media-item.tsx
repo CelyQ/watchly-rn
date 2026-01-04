@@ -24,7 +24,6 @@ export const MediaItem: React.FC<MediaItemProps> = ({
 				source={{ uri: imageUrl }}
 				style={styles.mediaImage}
 				resizeMode="cover"
-				defaultSource={require("@/assets/1024.png")}
 			/>
 			{isSelected && (
 				<View style={styles.selectedBadge}>

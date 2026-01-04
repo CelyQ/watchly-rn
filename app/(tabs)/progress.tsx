@@ -73,7 +73,6 @@ const TvProgressCard = ({
 						item.isFullyWatched && styles.imageWatched,
 					]}
 					resizeMode="cover"
-					defaultSource={require("@/assets/1024.png")}
 				/>
 			) : (
 				<View style={[styles.progressCardImage, styles.imagePlaceholder]}>
@@ -139,7 +138,6 @@ const MovieCard = ({ item, onPress }: { item: Movie; onPress: () => void }) => {
 					source={{ uri: imageUrl }}
 					style={styles.progressCardImage}
 					resizeMode="cover"
-					defaultSource={require("@/assets/1024.png")}
 				/>
 			) : (
 				<View style={[styles.progressCardImage, styles.imagePlaceholder]}>

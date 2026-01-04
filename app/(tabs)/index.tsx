@@ -139,7 +139,6 @@ const AnimatedSearchResult = ({
 								isCompleted && styles.imageWatched,
 							]}
 							resizeMode="cover"
-							defaultSource={require("@/assets/1024.png")}
 						/>
 						{isCompleted && (
 							<View style={styles.completedBadge}>

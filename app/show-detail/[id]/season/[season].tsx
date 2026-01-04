@@ -420,7 +420,6 @@ const SeasonScreen: React.FC = () => {
 						source={{ uri: posterUrl }}
 						style={styles.seasonThumbnail}
 						resizeMode="cover"
-						defaultSource={require("@/assets/1024.png")}
 					/>
 				) : (
 					<View style={[styles.seasonThumbnail, styles.thumbnailPlaceholder]}>
