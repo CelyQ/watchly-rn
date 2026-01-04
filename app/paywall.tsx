@@ -17,7 +17,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { LogOut } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
@@ -60,7 +60,7 @@ export default function Paywall() {
 	const hasProcessedRedirect = useRef(false);
 
 	// Helper function to close browser
-	const closeBrowser = useCallback(async () => {
+	const closeBrowser = async () => {
 		try {
 			await WebBrowser.dismissBrowser();
 		} catch {
@@ -68,10 +68,10 @@ export default function Paywall() {
 		}
 		// Clear the browser reference
 		browserRef.current = null;
-	}, []);
+	};
 
 	// Handle subscription success - extracted so it can be called from multiple places
-	const handleSuccess = useCallback(async () => {
+	const handleSuccess = async () => {
 		try {
 			// Prevent processing redirect multiple times
 			if (hasProcessedRedirect.current) {
@@ -146,15 +146,15 @@ export default function Paywall() {
 				// Ignore navigation errors
 			}
 		}
-	}, [router, closeBrowser]);
+	};
 
-	const handleCancel = useCallback(async () => {
+	const handleCancel = async () => {
 		// Mark as processed to prevent re-processing
 		hasProcessedRedirect.current = true;
 
 		// User canceled - close browser and silently return
 		await closeBrowser();
-	}, [closeBrowser]);
+	};
 
 	// React Query mutation for subscription upgrade
 	const { mutateAsync: upgradeSubscription, isPending: isUpgrading } =
@@ -225,7 +225,7 @@ export default function Paywall() {
 
 	// Check for active subscription and redirect away from paywall if found
 	// This handles the case where subscription becomes active and user is still on paywall
-	const checkAndRedirect = useCallback(async () => {
+	const checkAndRedirect = async () => {
 		try {
 			const { data: subscriptions } = await authClient.subscription.list();
 			const activeSubscription = subscriptions?.find(
@@ -237,12 +237,13 @@ export default function Paywall() {
 		} catch {
 			// Ignore errors
 		}
-	}, [router]);
+	};
 
 	useEffect(() => {
 		// Check on mount
 		void checkAndRedirect();
-	}, [checkAndRedirect]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// Also check when component gains focus (e.g., after returning from browser)
 	useFocusEffect(() => {
@@ -256,24 +257,23 @@ export default function Paywall() {
 		} else if (params.canceled === "true") {
 			void handleCancel();
 		}
-	}, [params.success, params.canceled, handleSuccess, handleCancel]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [params.success, params.canceled]);
 
 	// Close browser IMMEDIATELY when component gains focus with redirect params
 	// This must happen BEFORE any other processing to prevent browser from reopening
-	useFocusEffect(
-		useCallback(() => {
-			// If we have redirect params, close browser immediately
-			if (params.success === "true" || params.canceled === "true") {
-				// Don't mark as processed here - let the useEffect handle it
-				// This ensures the useEffect can still process the redirect
+	useFocusEffect(() => {
+		// If we have redirect params, close browser immediately
+		if (params.success === "true" || params.canceled === "true") {
+			// Don't mark as processed here - let the useEffect handle it
+			// This ensures the useEffect can still process the redirect
 
-				// Close browser immediately
-				WebBrowser.dismissBrowser().catch(() => {
-					// Ignore errors - browser might already be closed
-				});
-			}
-		}, [params.success, params.canceled]),
-	);
+			// Close browser immediately
+			WebBrowser.dismissBrowser().catch(() => {
+				// Ignore errors - browser might already be closed
+			});
+		}
+	});
 
 	const handleSubscribe = async (plan: SubscriptionPlan) => {
 		if (isUpgrading) return;

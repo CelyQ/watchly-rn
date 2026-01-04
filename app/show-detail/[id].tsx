@@ -2,7 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { getLocales } from "expo-localization";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { FC } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	Animated,
 	Dimensions,
@@ -118,9 +118,7 @@ const ShowDetail: FC = () => {
 	);
 
 	// Check if this item is in the not interested list
-	const isNotInterested = useMemo(() => {
-		return notInterestedData?.notInterested?.includes(imdbId) ?? false;
-	}, [notInterestedData?.notInterested, imdbId]);
+	const isNotInterested = notInterestedData?.notInterested?.includes(imdbId) ?? false;
 
 	const { mutateAsync: toggleLike, isPending: isTogglingLike } =
 		$api.useMutation("post", "/api/v1/likes/toggle");
@@ -386,10 +384,10 @@ const ShowDetail: FC = () => {
 	);
 
 	// Extract recommendation IDs
-	const recommendationIds = useMemo(() => {
+	const recommendationIds = (() => {
 		const edges = moreLikeThisData?.title?.moreLikeThisTitles?.edges ?? [];
 		return edges.map((edge) => edge.node.id).slice(0, 12);
-	}, [moreLikeThisData]);
+	})();
 
 	// Define recommendation title type
 	type RecommendationTitle = {
@@ -421,12 +419,10 @@ const ShowDetail: FC = () => {
 		})),
 	});
 
-	const recommendations = useMemo(() => {
-		return recommendationQueries
-			.filter((q) => q.isSuccess && q.data?.title)
-			.map((q) => q.data?.title)
-			.filter((t): t is RecommendationTitle => t !== undefined);
-	}, [recommendationQueries]);
+	const recommendations = recommendationQueries
+		.filter((q) => q.isSuccess && q.data?.title)
+		.map((q) => q.data?.title)
+		.filter((t): t is RecommendationTitle => t !== undefined);
 
 	const isLoadingRecommendations =
 		recommendationIds.length > 0 &&
@@ -437,18 +433,18 @@ const ShowDetail: FC = () => {
 	const seasonsTitle = seasonsData?.title;
 
 	// Get progress for this specific show/movie
-	const showEpisodes = useMemo(() => {
+	const showEpisodes = (() => {
 		if (!tvProgressData?.episodes) return [];
 		return tvProgressData.episodes.filter((ep) => ep.imdbId === imdbId);
-	}, [tvProgressData?.episodes, imdbId]);
+	})();
 
-	const showMovieProgress = useMemo(() => {
+	const showMovieProgress = (() => {
 		if (!allProgressData?.movies) return null;
 		return allProgressData.movies.find((m) => m.imdbId === imdbId);
-	}, [allProgressData?.movies, imdbId]);
+	})();
 
 	// Calculate season progress and watched status
-	const seasonProgress = useMemo(() => {
+	const seasonProgress = (() => {
 		if (!isSeries || !seasonsTitle?.episodes?.displayableSeasons?.edges) {
 			return new Map<number, { progress: number; isWatched: boolean }>();
 		}
@@ -488,9 +484,9 @@ const ShowDetail: FC = () => {
 		}
 
 		return progressMap;
-	}, [isSeries, seasonsTitle, showEpisodes, tvProgressData]);
+	})();
 
-	const watchedSeasons = useMemo(() => {
+	const watchedSeasons = (() => {
 		const watchedSet = new Set<number>();
 		seasonProgress.forEach((value, seasonNum) => {
 			if (value.isWatched) {
@@ -498,17 +494,17 @@ const ShowDetail: FC = () => {
 			}
 		});
 		return watchedSet;
-	}, [seasonProgress]);
+	})();
 
 	// Check if all episodes are watched (fast check)
-	const allEpisodesWatched = useMemo(() => {
+	const allEpisodesWatched = (() => {
 		if (!isSeries) {
 			return Boolean(showMovieProgress?.isWatched);
 		}
 
 		if (showEpisodes.length === 0) return false;
 		return showEpisodes.every((ep) => ep.isWatched);
-	}, [isSeries, showEpisodes, showMovieProgress]);
+	})();
 
 	useEffect(() => {
 		setWatched(allEpisodesWatched);
@@ -608,6 +604,7 @@ const ShowDetail: FC = () => {
 						source={{ uri: data.primaryImage.url }}
 						style={styles.heroImage}
 						resizeMode="cover"
+						defaultSource={require("@/assets/1024.png")}
 					/>
 				) : (
 					<View style={[styles.heroImage, styles.placeholderImage]}>
@@ -840,6 +837,7 @@ const ShowDetail: FC = () => {
 																		}}
 																		style={styles.providerLogo}
 																		resizeMode="contain"
+																		defaultSource={require("@/assets/1024.png")}
 																	/>
 																</View>
 																<Text
@@ -872,6 +870,7 @@ const ShowDetail: FC = () => {
 																		}}
 																		style={styles.providerLogo}
 																		resizeMode="contain"
+																		defaultSource={require("@/assets/1024.png")}
 																	/>
 																</View>
 																<Text
@@ -904,6 +903,7 @@ const ShowDetail: FC = () => {
 																		}}
 																		style={styles.providerLogo}
 																		resizeMode="contain"
+																		defaultSource={require("@/assets/1024.png")}
 																	/>
 																</View>
 																<Text
@@ -999,6 +999,8 @@ const ShowDetail: FC = () => {
 																	"https://via.placeholder.com/100x100/333/fff?text=?",
 															}}
 															style={styles.castImage}
+															resizeMode="cover"
+															defaultSource={require("@/assets/1024.png")}
 														/>
 														<Text style={styles.castName} numberOfLines={1}>
 															{cast.name.nameText.text}
@@ -1053,6 +1055,8 @@ const ShowDetail: FC = () => {
 															<Image
 																source={{ uri: rec.primaryImage.url }}
 																style={styles.recommendationImage}
+																resizeMode="cover"
+																defaultSource={require("@/assets/1024.png")}
 															/>
 														) : (
 															<View

@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import {
 	ActivityIndicator,
 	Alert,
 	Animated,
+	FlatList,
 	Image,
 	Platform,
-	ScrollView,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
@@ -152,10 +152,7 @@ const SeasonScreen: React.FC = () => {
 	const episodeEdges: EpisodeEdge[] =
 		episodesData?.title?.episodes?.episodes?.edges ?? [];
 
-	const progressEpisodes = useMemo(
-		() => progressData?.episodes ?? [],
-		[progressData?.episodes],
-	);
+	const progressEpisodes = progressData?.episodes ?? [];
 
 	// Local optimistic state for episode watched flags to avoid flicker
 	const [episodeState, setEpisodeState] = React.useState<Map<string, boolean>>(
@@ -419,7 +416,12 @@ const SeasonScreen: React.FC = () => {
 
 				{/* Season Thumbnail */}
 				{posterUrl ? (
-					<Image source={{ uri: posterUrl }} style={styles.seasonThumbnail} />
+					<Image
+						source={{ uri: posterUrl }}
+						style={styles.seasonThumbnail}
+						resizeMode="cover"
+						defaultSource={require("@/assets/1024.png")}
+					/>
 				) : (
 					<View style={[styles.seasonThumbnail, styles.thumbnailPlaceholder]}>
 						<Text style={styles.thumbnailPlaceholderText}>
@@ -438,11 +440,7 @@ const SeasonScreen: React.FC = () => {
 			</View>
 
 			{/* Episodes List */}
-			<ScrollView
-				style={styles.scrollView}
-				contentContainerStyle={styles.scrollContent}
-				scrollEnabled={!isMarkingMany}
-			>
+			<View style={styles.scrollView}>
 				<Text style={styles.episodesTitle}>Episodes</Text>
 
 				{isLoading ? (
@@ -459,60 +457,73 @@ const SeasonScreen: React.FC = () => {
 						No episodes found for this season.
 					</Text>
 				) : (
-					episodeEdges.map((edge) => {
-						if (!edge) return null;
-						const episodeNumber = edge.position;
-						const key = `${seasonNumber}-${episodeNumber}`;
-						const isWatched = episodeState.get(key) ?? false;
-						const episodeTitle =
-							getEpisodeTitle(edge) || `Episode ${episodeNumber}`;
+					<FlatList
+						data={episodeEdges.filter((edge): edge is NonNullable<typeof edge> => Boolean(edge))}
+						renderItem={({ item: edge }) => {
+							const episodeNumber = edge.position;
+							const key = `${seasonNumber}-${episodeNumber}`;
+							const isWatched = episodeState.get(key) ?? false;
+							const episodeTitle =
+								getEpisodeTitle(edge) || `Episode ${episodeNumber}`;
 
-						return (
-							<TouchableOpacity
-								key={edge.node.id}
-								activeOpacity={0.7}
-								onPress={() => void handleToggleEpisode(episodeNumber)}
-								onLongPress={() => showEpisodeActions(episodeNumber)}
-								delayLongPress={250}
-								disabled={isMarkingMany}
-							>
-								<View style={styles.episodeRow}>
-									{/* Status Circle */}
-									<Animated.View
-										style={[
-											styles.statusCircle,
-											isWatched && styles.statusCircleWatched,
-											episodeNumber === updatingEpisode &&
-												styles.statusCircleProcessing,
-											episodeNumber === updatingEpisode && {
-												transform: [{ scale: pulseAnim }],
-											},
-										]}
-									/>
+							return (
+								<TouchableOpacity
+									activeOpacity={0.7}
+									onPress={() => void handleToggleEpisode(episodeNumber)}
+									onLongPress={() => showEpisodeActions(episodeNumber)}
+									delayLongPress={250}
+									disabled={isMarkingMany}
+								>
+									<View style={styles.episodeRow}>
+										{/* Status Circle */}
+										<Animated.View
+											style={[
+												styles.statusCircle,
+												isWatched && styles.statusCircleWatched,
+												episodeNumber === updatingEpisode &&
+													styles.statusCircleProcessing,
+												episodeNumber === updatingEpisode && {
+													transform: [{ scale: pulseAnim }],
+												},
+											]}
+										/>
 
-									{/* Episode Info */}
-									<View style={styles.episodeInfo}>
-										<Text style={styles.episodeNumber}>
-											Episode {episodeNumber}
-										</Text>
-										<Text style={styles.episodeTitleText} numberOfLines={1}>
-											{episodeTitle}
-										</Text>
+										{/* Episode Info */}
+										<View style={styles.episodeInfo}>
+											<Text style={styles.episodeNumber}>
+												Episode {episodeNumber}
+											</Text>
+											<Text style={styles.episodeTitleText} numberOfLines={1}>
+												{episodeTitle}
+											</Text>
+										</View>
 									</View>
+								</TouchableOpacity>
+							);
+						}}
+						keyExtractor={(edge) => edge.node.id}
+						scrollEnabled={!isMarkingMany}
+						contentContainerStyle={styles.scrollContent}
+						removeClippedSubviews={true}
+						initialNumToRender={15}
+						maxToRenderPerBatch={10}
+						windowSize={10}
+						getItemLayout={(_, index) => ({
+							length: 60, // Approximate height of episode row
+							offset: 60 * index,
+							index,
+						})}
+						ListFooterComponent={
+							isUpdatingEpisode && !isMarkingMany ? (
+								<View style={styles.savingContainer}>
+									<ActivityIndicator size="small" color="#f97316" />
+									<Text style={styles.savingText}>Saving progress…</Text>
 								</View>
-							</TouchableOpacity>
-						);
-					})
+							) : null
+						}
+					/>
 				)}
-
-				{/* Per-episode saving indicator (for single toggles only) */}
-				{isUpdatingEpisode && !isMarkingMany && (
-					<View style={styles.savingContainer}>
-						<ActivityIndicator size="small" color="#f97316" />
-						<Text style={styles.savingText}>Saving progress…</Text>
-					</View>
-				)}
-			</ScrollView>
+			</View>
 
 			{/* Fullscreen overlay when marking many episodes */}
 			{isMarkingMany && (

@@ -1,11 +1,11 @@
 import { useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
 	Animated,
+	FlatList,
 	Image,
 	Pressable,
-	ScrollView,
 	StatusBar,
 	StyleSheet,
 	Text,
@@ -66,11 +66,14 @@ const TvProgressCard = ({
 			{/* Poster */}
 			{imageUrl ? (
 				<Image
+					key={imageUrl} // Force re-render when URL changes
 					source={{ uri: imageUrl }}
 					style={[
 						styles.progressCardImage,
 						item.isFullyWatched && styles.imageWatched,
 					]}
+					resizeMode="cover"
+					defaultSource={require("@/assets/1024.png")}
 				/>
 			) : (
 				<View style={[styles.progressCardImage, styles.imagePlaceholder]}>
@@ -131,7 +134,13 @@ const MovieCard = ({ item, onPress }: { item: Movie; onPress: () => void }) => {
 			style={styles.progressCard}
 		>
 			{imageUrl ? (
-				<Image source={{ uri: imageUrl }} style={styles.progressCardImage} />
+				<Image
+					key={imageUrl} // Force re-render when URL changes
+					source={{ uri: imageUrl }}
+					style={styles.progressCardImage}
+					resizeMode="cover"
+					defaultSource={require("@/assets/1024.png")}
+				/>
 			) : (
 				<View style={[styles.progressCardImage, styles.imagePlaceholder]}>
 					<Text style={styles.placeholderText}>{titleText[0] ?? "?"}</Text>
@@ -201,7 +210,7 @@ const Index = () => {
 	const tvShows = (progressData?.tvShows ?? []) as TvShow[];
 
 	// Get all unique imdbIds that need title details (missing title or posterUrl)
-	const allImdbIds = useMemo(() => {
+	const allImdbIds = (() => {
 		const ids = new Set<string>();
 		tvShows.forEach((show) => {
 			if (!show.title || !show.posterUrl) {
@@ -214,7 +223,7 @@ const Index = () => {
 			}
 		});
 		return Array.from(ids);
-	}, [tvShows, movies]);
+	})();
 
 	// Fetch title details for ALL items that need them (React Query handles caching)
 	// Use unique query key "progress-title-details" to avoid conflicts with liked.tsx
@@ -238,9 +247,15 @@ const Index = () => {
 		})),
 	});
 
+	// Check if detail queries are still loading
+	const isLoadingDetails = detailQueries.some((query) => query.isLoading);
+
 	// Create a lookup map from the query results
-	const detailsMap = useMemo(() => {
-		const map = new Map<string, { title: string | null; posterUrl: string | null }>();
+	const detailsMap = (() => {
+		const map = new Map<
+			string,
+			{ title: string | null; posterUrl: string | null }
+		>();
 		detailQueries.forEach((query) => {
 			if (query.data?.imdbId) {
 				map.set(query.data.imdbId, {
@@ -250,10 +265,10 @@ const Index = () => {
 			}
 		});
 		return map;
-	}, [detailQueries]);
+	})();
 
 	// Categorize items into groups with enriched data
-	const { progressTvShows, finishedSeries, finishedMovies } = useMemo(() => {
+	const { progressTvShows, finishedSeries, finishedMovies } = (() => {
 		const progressTv: TvShow[] = [];
 		const finishedTv: TvShow[] = [];
 		const finishedMov: Movie[] = [];
@@ -291,7 +306,7 @@ const Index = () => {
 			finishedSeries: finishedTv,
 			finishedMovies: finishedMov,
 		};
-	}, [movies, tvShows, detailsMap]);
+	})();
 
 	const renderTvShowSection = (
 		label: string,
@@ -300,51 +315,100 @@ const Index = () => {
 		sectionKey: string,
 		showProgress = true,
 	) => {
+		const isLoading = isProgressLoading || isLoadingDetails;
+
+		const renderItem = ({ item }: { item: TvShow; index: number }) => (
+			<TvProgressCard
+				item={item}
+				showProgress={showProgress}
+				onPress={() =>
+					router.push({
+						pathname: "/show-detail/[id]",
+						params: { id: item.imdbId },
+					})
+				}
+			/>
+		);
+
+		const renderHeader = () => {
+			if (isLoading) {
+				return (
+					<View style={styles.skeletonRow}>
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+					</View>
+				);
+			}
+			return null;
+		};
+
+		const renderEmpty = () => {
+			if (!isLoading && !progressError && items.length === 0) {
+				return (
+					<View style={styles.emptyStateContainer}>
+						<Text style={styles.emptyStateText}>
+							No {title.toLowerCase()} yet
+						</Text>
+						<Pressable onPress={() => router.push("/")}>
+							<Text style={styles.discoveryLinkText}>
+								Discover new content →
+							</Text>
+						</Pressable>
+					</View>
+				);
+			}
+			return null;
+		};
+
+		const getItemLayout = (_: unknown, index: number) => ({
+			length: CARD_WIDTH + 12, // card width + marginRight
+			offset: (CARD_WIDTH + 12) * index,
+			index,
+		});
+
+		// Show loading state with horizontal skeleton row
+		if (isLoading) {
+			return (
+				<View style={styles.section} key={sectionKey}>
+					<Text style={styles.sectionLabel}>{label}</Text>
+					<Text style={styles.sectionTitle}>{title}</Text>
+					<View style={styles.skeletonRow}>
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+					</View>
+				</View>
+			);
+		}
+
 		return (
 			<View style={styles.section} key={sectionKey}>
 				<Text style={styles.sectionLabel}>{label}</Text>
 				<Text style={styles.sectionTitle}>{title}</Text>
 
-				<ScrollView
-					horizontal
-					showsHorizontalScrollIndicator={false}
-					style={styles.mediaScroll}
-					contentContainerStyle={styles.mediaScrollContent}
-				>
-					{isProgressLoading && (
-						<>
-							<ProgressCardSkeleton />
-							<ProgressCardSkeleton />
-							<ProgressCardSkeleton />
-						</>
-					)}
-					{!isProgressLoading && !progressError && items.length === 0 && (
-						<View style={styles.emptyStateContainer}>
-							<Text style={styles.emptyStateText}>
-								No {title.toLowerCase()} yet
-							</Text>
-							<Pressable onPress={() => router.push("/")}>
-								<Text style={styles.discoveryLinkText}>
-									Discover new content →
-								</Text>
-							</Pressable>
-						</View>
-					)}
-					{!isProgressLoading &&
-						items.map((item, i) => (
-							<TvProgressCard
-								key={`${item.imdbId}-${i}`}
-								item={item}
-								showProgress={showProgress}
-								onPress={() =>
-									router.push({
-										pathname: "/show-detail/[id]",
-										params: { id: item.imdbId },
-									})
-								}
-							/>
-						))}
-				</ScrollView>
+				{items.length === 0 ? (
+					renderEmpty()
+				) : (
+					<FlatList
+						data={items}
+						renderItem={renderItem}
+						keyExtractor={(item, index) =>
+							`${item.imdbId}-${index}-${item.posterUrl ?? ""}`
+						}
+						horizontal
+						showsHorizontalScrollIndicator={false}
+						style={styles.mediaScroll}
+						contentContainerStyle={styles.mediaScrollContent}
+						getItemLayout={getItemLayout}
+						removeClippedSubviews={true}
+						ListHeaderComponent={renderHeader}
+					/>
+				)}
 			</View>
 		);
 	};
@@ -355,51 +419,146 @@ const Index = () => {
 		items: Movie[],
 		sectionKey: string,
 	) => {
+		const isLoading = isProgressLoading || isLoadingDetails;
+
+		const renderItem = ({ item }: { item: Movie; index: number }) => (
+			<MovieCard
+				item={item}
+				onPress={() =>
+					router.push({
+						pathname: "/show-detail/[id]",
+						params: { id: item.imdbId },
+					})
+				}
+			/>
+		);
+
+		const renderHeader = () => {
+			if (isLoading) {
+				return (
+					<View style={styles.skeletonRow}>
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+					</View>
+				);
+			}
+			return null;
+		};
+
+		const renderEmpty = () => {
+			if (!isLoading && !progressError && items.length === 0) {
+				return (
+					<View style={styles.emptyStateContainer}>
+						<Text style={styles.emptyStateText}>
+							No {title.toLowerCase()} yet
+						</Text>
+						<Pressable onPress={() => router.push("/")}>
+							<Text style={styles.discoveryLinkText}>
+								Discover new content →
+							</Text>
+						</Pressable>
+					</View>
+				);
+			}
+			return null;
+		};
+
+		const getItemLayout = (_: unknown, index: number) => ({
+			length: CARD_WIDTH + 12, // card width + marginRight
+			offset: (CARD_WIDTH + 12) * index,
+			index,
+		});
+
+		// Show loading state with horizontal skeleton row
+		if (isLoading) {
+			return (
+				<View style={styles.section} key={sectionKey}>
+					<Text style={styles.sectionLabel}>{label}</Text>
+					<Text style={styles.sectionTitle}>{title}</Text>
+					<View style={styles.skeletonRow}>
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+						<ProgressCardSkeleton />
+					</View>
+				</View>
+			);
+		}
+
 		return (
 			<View style={styles.section} key={sectionKey}>
 				<Text style={styles.sectionLabel}>{label}</Text>
 				<Text style={styles.sectionTitle}>{title}</Text>
 
-				<ScrollView
-					horizontal
-					showsHorizontalScrollIndicator={false}
-					style={styles.mediaScroll}
-					contentContainerStyle={styles.mediaScrollContent}
-				>
-					{isProgressLoading && (
-						<>
-							<ProgressCardSkeleton />
-							<ProgressCardSkeleton />
-							<ProgressCardSkeleton />
-						</>
-					)}
-					{!isProgressLoading && !progressError && items.length === 0 && (
-						<View style={styles.emptyStateContainer}>
-							<Text style={styles.emptyStateText}>
-								No {title.toLowerCase()} yet
-							</Text>
-							<Pressable onPress={() => router.push("/")}>
-								<Text style={styles.discoveryLinkText}>
-									Discover new content →
-								</Text>
-							</Pressable>
-						</View>
-					)}
-					{!isProgressLoading &&
-						items.map((item, i) => (
-							<MovieCard
-								key={`${item.imdbId}-${i}`}
-								item={item}
-								onPress={() =>
-									router.push({
-										pathname: "/show-detail/[id]",
-										params: { id: item.imdbId },
-									})
-								}
-							/>
-						))}
-				</ScrollView>
+				{items.length === 0 ? (
+					renderEmpty()
+				) : (
+					<FlatList
+						data={items}
+						renderItem={renderItem}
+						keyExtractor={(item, index) =>
+							`${item.imdbId}-${index}-${item.posterUrl ?? ""}`
+						}
+						horizontal
+						showsHorizontalScrollIndicator={false}
+						style={styles.mediaScroll}
+						contentContainerStyle={styles.mediaScrollContent}
+						getItemLayout={getItemLayout}
+						removeClippedSubviews={true}
+						ListHeaderComponent={renderHeader}
+					/>
+				)}
 			</View>
+		);
+	};
+
+	const sections = [
+		{
+			type: "tv-progress",
+			label: "IN PROGRESS",
+			title: "TV Shows",
+			items: progressTvShows,
+			showProgress: true,
+		},
+		{
+			type: "tv-finished",
+			label: "COMPLETED",
+			title: "TV Shows",
+			items: finishedSeries,
+			showProgress: false,
+		},
+		{
+			type: "movies",
+			label: "WATCHED",
+			title: "Movies",
+			items: finishedMovies,
+			showProgress: false,
+		},
+	];
+
+	const renderSection = ({
+		item: section,
+	}: {
+		item: (typeof sections)[number];
+	}) => {
+		if (section.type === "movies") {
+			return renderMovieSection(
+				section.label,
+				section.title,
+				section.items,
+				section.type,
+			);
+		}
+		return renderTvShowSection(
+			section.label,
+			section.title,
+			section.items,
+			section.type,
+			section.showProgress,
 		);
 	};
 
@@ -407,34 +566,19 @@ const Index = () => {
 		<SafeAreaView style={styles.container}>
 			<StatusBar barStyle="light-content" backgroundColor="#000" />
 
-			<Animated.ScrollView
+			<FlatList
 				style={styles.scrollView}
+				data={sections}
+				renderItem={renderSection}
+				keyExtractor={(item) => item.type}
 				showsVerticalScrollIndicator={false}
-				scrollEventThrottle={16}
 				contentContainerStyle={{ paddingTop: HEADER_HEIGHT }}
-			>
-				{renderTvShowSection(
-					"IN PROGRESS",
-					"TV Shows",
-					progressTvShows,
-					"progress-tv",
-					true,
-				)}
-				{renderTvShowSection(
-					"COMPLETED",
-					"TV Shows",
-					finishedSeries,
-					"finished-tv",
-					false,
-				)}
-				{renderMovieSection(
-					"WATCHED",
-					"Movies",
-					finishedMovies,
-					"finished-movies",
-				)}
-				<View style={{ height: 80 }} />
-			</Animated.ScrollView>
+				removeClippedSubviews={true}
+				initialNumToRender={3}
+				maxToRenderPerBatch={3}
+				windowSize={5}
+				ListFooterComponent={<View style={{ height: 80 }} />}
+			/>
 		</SafeAreaView>
 	);
 };
@@ -467,6 +611,13 @@ const styles = StyleSheet.create({
 		marginLeft: -4,
 	},
 	mediaScrollContent: {
+		paddingRight: 16,
+		paddingLeft: 4,
+	},
+	skeletonRow: {
+		flexDirection: "row",
+		marginLeft: -4,
+		paddingLeft: 4,
 		paddingRight: 16,
 	},
 	loadingText: {

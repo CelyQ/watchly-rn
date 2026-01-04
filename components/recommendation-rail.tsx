@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
 	Animated,
+	FlatList,
 	Image,
-	ScrollView,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
@@ -99,11 +99,14 @@ const RecommendationCard = ({
 				{imageUrl ? (
 					<View style={styles.imageContainer}>
 						<Image
+							key={imageUrl}
 							source={{ uri: imageUrl }}
 							style={[
 								styles.mediaCardImage,
 								isNotInterested && styles.imageNotInterested,
 							]}
+							resizeMode="cover"
+							defaultSource={require("@/assets/1024.png")}
 						/>
 						{isNotInterested && (
 							<View style={styles.notInterestedOverlay}>
@@ -147,7 +150,10 @@ const RecommendationCard = ({
 				{/* Year */}
 				{year && (
 					<Text
-						style={[styles.yearText, isNotInterested && styles.textNotInterested]}
+						style={[
+							styles.yearText,
+							isNotInterested && styles.textNotInterested,
+						]}
 					>
 						{year}
 					</Text>
@@ -255,6 +261,42 @@ const RecommendationSectionComponent = ({
 		return null;
 	}
 
+	const renderItem = ({
+		item,
+		index,
+	}: {
+		item: RecommendationItem;
+		index: number;
+	}) => {
+		const isNotInterested = notInterestedIds.has(item.id);
+		return (
+			<RecommendationCard
+				item={item}
+				index={index}
+				isNotInterested={isNotInterested}
+				onPress={() =>
+					router.push({
+						pathname: "/show-detail/[id]",
+						params: { id: item.id },
+					})
+				}
+				onToggleNotInterested={() =>
+					onToggleNotInterested(
+						item.id,
+						item.titleType.isSeries ? "tv" : "movie",
+						isNotInterested,
+					)
+				}
+			/>
+		);
+	};
+
+	const getItemLayout = (_: unknown, index: number) => ({
+		length: CARD_WIDTH + 12, // card width + marginRight
+		offset: (CARD_WIDTH + 12) * index,
+		index,
+	});
+
 	return (
 		<View style={styles.section}>
 			<View style={styles.sectionHeader}>
@@ -266,37 +308,20 @@ const RecommendationSectionComponent = ({
 				</View>
 			</View>
 
-			<ScrollView
+			<FlatList
+				data={section.recommendations}
+				renderItem={renderItem}
+				keyExtractor={(item, index) => {
+					const imageUrl = item.primaryImage?.url ?? "";
+					return `${item.id}-${index}-${imageUrl}`;
+				}}
 				horizontal
 				showsHorizontalScrollIndicator={false}
 				style={styles.mediaScroll}
 				contentContainerStyle={styles.mediaScrollContent}
-			>
-				{section.recommendations.map((item, i) => {
-					const isNotInterested = notInterestedIds.has(item.id);
-					return (
-						<RecommendationCard
-							key={`${item.id}-${i}`}
-							item={item}
-							index={i}
-							isNotInterested={isNotInterested}
-							onPress={() =>
-								router.push({
-									pathname: "/show-detail/[id]",
-									params: { id: item.id },
-								})
-							}
-							onToggleNotInterested={() =>
-								onToggleNotInterested(
-									item.id,
-									item.titleType.isSeries ? "tv" : "movie",
-									isNotInterested,
-								)
-							}
-						/>
-					);
-				})}
-			</ScrollView>
+				getItemLayout={getItemLayout}
+				removeClippedSubviews={true}
+			/>
 		</View>
 	);
 };
@@ -322,9 +347,7 @@ export const RecommendationRails = () => {
 	);
 
 	// Convert to Set for efficient lookup
-	const notInterestedIds = useMemo(() => {
-		return new Set(notInterestedData?.notInterested ?? []);
-	}, [notInterestedData?.notInterested]);
+	const notInterestedIds = new Set(notInterestedData?.notInterested ?? []);
 
 	// Fetch recommendations
 	const {
@@ -341,32 +364,28 @@ export const RecommendationRails = () => {
 	});
 
 	// Handle toggle not interested
-	const handleToggleNotInterested = useCallback(
-		async (
-			imdbId: string,
-			mediaType: "movie" | "tv",
-			isCurrentlyNotInterested: boolean,
-		) => {
+	const handleToggleNotInterested = async (
+		imdbId: string,
+		mediaType: "movie" | "tv",
+		isCurrentlyNotInterested: boolean,
+	) => {
+		let success = false;
+		if (isCurrentlyNotInterested) {
+			success = await removeNotInterested(imdbId);
+		} else {
+			success = await addNotInterested(imdbId, mediaType);
+		}
 
-			let success = false;
-			if (isCurrentlyNotInterested) {
-				success = await removeNotInterested(imdbId);
-			} else {
-				success = await addNotInterested(imdbId, mediaType);
-			}
-
-			if (success) {
-				// Invalidate queries to get fresh data
-				queryClient.invalidateQueries({
-					queryKey: ["get", "/api/v1/media/notInterested"],
-				});
-				queryClient.invalidateQueries({
-					queryKey: ["get", "/api/v1/media/getRecommendations"],
-				});
-			}
-		},
-		[queryClient],
-	);
+		if (success) {
+			// Invalidate queries to get fresh data
+			queryClient.invalidateQueries({
+				queryKey: ["get", "/api/v1/media/notInterested"],
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["get", "/api/v1/media/getRecommendations"],
+			});
+		}
+	};
 
 	// Loading state
 	if (isLoading) {
@@ -378,16 +397,13 @@ export const RecommendationRails = () => {
 						<Text style={styles.sectionTitle}>Loading...</Text>
 					</View>
 				</View>
-				<ScrollView
-					horizontal
-					showsHorizontalScrollIndicator={false}
-					style={styles.mediaScroll}
-					contentContainerStyle={styles.mediaScrollContent}
-				>
+				<View style={styles.skeletonRow}>
 					<MediaCardSkeleton />
 					<MediaCardSkeleton />
 					<MediaCardSkeleton />
-				</ScrollView>
+					<MediaCardSkeleton />
+					<MediaCardSkeleton />
+				</View>
 			</View>
 		);
 	}
@@ -455,6 +471,13 @@ const styles = StyleSheet.create({
 		marginLeft: -4,
 	},
 	mediaScrollContent: {
+		paddingRight: 16,
+		paddingLeft: 4,
+	},
+	skeletonRow: {
+		flexDirection: "row",
+		marginLeft: -4,
+		paddingLeft: 4,
 		paddingRight: 16,
 	},
 	// Card styles

@@ -1,11 +1,11 @@
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	Animated,
+	FlatList,
 	Image,
 	Keyboard,
 	Pressable,
-	ScrollView,
 	StatusBar,
 	StyleSheet,
 	Text,
@@ -92,7 +92,8 @@ const AnimatedSearchResult = ({
 				useNativeDriver: true,
 			}),
 		]).start();
-	}, [fadeAnim, slideAnim, index]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [index]); // Only depend on index, animations are stable refs
 
 	const title = item.media_type === "movie" ? item.title : item.name;
 	const releaseDate =
@@ -131,11 +132,14 @@ const AnimatedSearchResult = ({
 				{posterUrl ? (
 					<View style={styles.posterContainer}>
 						<Image
+							key={posterUrl}
 							source={{ uri: posterUrl }}
 							style={[
 								styles.searchResultImage,
 								isCompleted && styles.imageWatched,
 							]}
+							resizeMode="cover"
+							defaultSource={require("@/assets/1024.png")}
 						/>
 						{isCompleted && (
 							<View style={styles.completedBadge}>
@@ -310,7 +314,7 @@ const App = () => {
 	const { data: progressData } = $api.useQuery("get", "/api/v1/progress/all");
 
 	// Create lookup maps for progress
-	const tvProgressMap = useMemo(() => {
+	const tvProgressMap = (() => {
 		const map = new Map<string, TvShowProgress>();
 		if (progressData?.tvShows) {
 			for (const show of progressData.tvShows as TvShowProgress[]) {
@@ -318,9 +322,9 @@ const App = () => {
 			}
 		}
 		return map;
-	}, [progressData?.tvShows]);
+	})();
 
-	const movieProgressMap = useMemo(() => {
+	const movieProgressMap = (() => {
 		const map = new Map<string, MovieProgress>();
 		if (progressData?.movies) {
 			for (const movie of progressData.movies as MovieProgress[]) {
@@ -328,20 +332,26 @@ const App = () => {
 			}
 		}
 		return map;
-	}, [progressData?.movies]);
+	})();
 
-	const sortedSearchResults = useMemo(() => {
+	const sortedSearchResults = (() => {
 		if (!searchResults?.results || !debouncedSearchQuery.trim())
 			return searchResults?.results;
 
-		return [...searchResults.results].sort((a, b) => {
+		// Limit sorting to first 50 results for performance
+		const resultsToSort = searchResults.results.slice(0, 50);
+		const rest = searchResults.results.slice(50);
+
+		const sorted = [...resultsToSort].sort((a, b) => {
 			const titleA = a.media_type === "movie" ? a.title : a.name;
 			const titleB = b.media_type === "movie" ? b.title : b.name;
 			const similarityA = calculateSimilarity(titleA, debouncedSearchQuery);
 			const similarityB = calculateSimilarity(titleB, debouncedSearchQuery);
 			return similarityB - similarityA;
 		});
-	}, [searchResults, debouncedSearchQuery]);
+
+		return [...sorted, ...rest];
+	})();
 
 	const isSearchActive = searchQuery.trim().length > 0;
 
@@ -351,105 +361,144 @@ const App = () => {
 		Keyboard.dismiss();
 	};
 
+	const renderSearchResult = ({
+		item,
+		index,
+	}: {
+		item: (typeof sortedSearchResults)[number];
+		index: number;
+	}) => (
+		<AnimatedSearchResult
+			item={item}
+			index={index}
+			onPress={() =>
+				router.push({
+					pathname: "/show-detail/[id]",
+					params: { id: item.id },
+				})
+			}
+			tvProgress={tvProgressMap.get(item.id)}
+			movieProgress={movieProgressMap.get(item.id)}
+		/>
+	);
+
+	const renderListHeader = () => (
+		<>
+			{/* Search Bar */}
+			<View style={styles.searchBarWrapper}>
+				<View style={styles.searchBarContainer}>
+					<Search
+						stroke="#666"
+						width={20}
+						height={20}
+						style={styles.searchBarIcon}
+					/>
+					<TextInput
+						ref={inputRef}
+						style={styles.searchInput}
+						placeholder="Search movies & shows..."
+						placeholderTextColor="#555"
+						value={searchQuery}
+						onChangeText={setSearchQuery}
+						keyboardAppearance="dark"
+						selectionColor="#b14aed"
+						returnKeyType="search"
+					/>
+					{searchQuery.length > 0 && (
+						<Pressable onPress={clearSearch} style={styles.clearButton}>
+							<X stroke="#666" width={18} height={18} />
+						</Pressable>
+					)}
+				</View>
+			</View>
+
+			{/* Search Results Header */}
+			{isSearchActive && (
+				<View style={styles.searchResultsSection}>
+					<View style={styles.resultsHeader}>
+						<Text style={styles.resultsTitle}>Results</Text>
+						{sortedSearchResults && sortedSearchResults.length > 0 && (
+							<Text style={styles.resultsCount}>
+								{sortedSearchResults.length} found
+							</Text>
+						)}
+					</View>
+
+					{isSearchLoading && (
+						<View>
+							<SearchResultSkeleton />
+							<SearchResultSkeleton />
+							<SearchResultSkeleton />
+						</View>
+					)}
+
+					{!isSearchLoading && sortedSearchResults?.length === 0 && (
+						<View style={styles.emptyState}>
+							<Search stroke="#333" width={48} height={48} />
+							<Text style={styles.emptyStateText}>No results found</Text>
+							<Text style={styles.emptyStateSubtext}>
+								Try a different search term
+							</Text>
+						</View>
+					)}
+				</View>
+			)}
+		</>
+	);
+
+	const renderListFooter = () => (
+		<>
+			{/* Trending Content */}
+			{!isSearchActive && (
+				<>
+					<TrendingMedia mediaType="tv" title="Shows" />
+					<TrendingMedia mediaType="movie" title="Movies" />
+				</>
+			)}
+
+			{/* Personalized Recommendations */}
+			{!isSearchActive && <RecommendationRails />}
+
+			<View style={{ height: 100 }} />
+		</>
+	);
+
 	return (
 		<SafeAreaView style={styles.container}>
 			<StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
 
-			<ScrollView
-				style={styles.scrollView}
-				showsVerticalScrollIndicator={false}
-				keyboardShouldPersistTaps="always"
-			>
-				{/* Search Bar */}
-				<View style={styles.searchBarWrapper}>
-					<View style={styles.searchBarContainer}>
-						<Search
-							stroke="#666"
-							width={20}
-							height={20}
-							style={styles.searchBarIcon}
-						/>
-						<TextInput
-							ref={inputRef}
-							style={styles.searchInput}
-							placeholder="Search movies & shows..."
-							placeholderTextColor="#555"
-							value={searchQuery}
-							onChangeText={setSearchQuery}
-							keyboardAppearance="dark"
-							selectionColor="#b14aed"
-							returnKeyType="search"
-						/>
-						{searchQuery.length > 0 && (
-							<Pressable onPress={clearSearch} style={styles.clearButton}>
-								<X stroke="#666" width={18} height={18} />
-							</Pressable>
-						)}
-					</View>
-				</View>
-
-				{/* Search Results */}
-				{isSearchActive && (
-					<View style={styles.searchResultsSection}>
-						<View style={styles.resultsHeader}>
-							<Text style={styles.resultsTitle}>Results</Text>
-							{sortedSearchResults && sortedSearchResults.length > 0 && (
-								<Text style={styles.resultsCount}>
-									{sortedSearchResults.length} found
-								</Text>
-							)}
-						</View>
-
-						{isSearchLoading && (
-							<View>
-								<SearchResultSkeleton />
-								<SearchResultSkeleton />
-								<SearchResultSkeleton />
-							</View>
-						)}
-
-						{!isSearchLoading && sortedSearchResults?.length === 0 && (
-							<View style={styles.emptyState}>
-								<Search stroke="#333" width={48} height={48} />
-								<Text style={styles.emptyStateText}>No results found</Text>
-								<Text style={styles.emptyStateSubtext}>
-									Try a different search term
-								</Text>
-							</View>
-						)}
-
-						{!isSearchLoading &&
-							sortedSearchResults?.map((item, i) => (
-								<AnimatedSearchResult
-									key={`${item.id}-${i}`}
-									item={item}
-									index={i}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: item.id },
-										})
-									}
-									tvProgress={tvProgressMap.get(item.id)}
-									movieProgress={movieProgressMap.get(item.id)}
-								/>
-							))}
-					</View>
-				)}
-
-				{/* Trending Content */}
-				{!isSearchActive && (
-					<>
-						<TrendingMedia mediaType="tv" title="Shows" />
-						<TrendingMedia mediaType="movie" title="Movies" />
-					</>
-				)}
-
-				{/* Personalized Recommendations */}
-				{!isSearchActive && <RecommendationRails />}
-
-				<View style={{ height: 100 }} />
-			</ScrollView>
+			{isSearchActive && !isSearchLoading && sortedSearchResults ? (
+				<FlatList
+					style={styles.scrollView}
+					data={sortedSearchResults}
+					renderItem={renderSearchResult}
+					keyExtractor={(item, index) => `${item.id}-${index}`}
+					ListHeaderComponent={renderListHeader}
+					ListFooterComponent={renderListFooter}
+					showsVerticalScrollIndicator={false}
+					keyboardShouldPersistTaps="always"
+					removeClippedSubviews={true}
+					initialNumToRender={10}
+					maxToRenderPerBatch={10}
+					windowSize={10}
+					getItemLayout={(_, index) => ({
+						length: 152, // Approximate height of search result item (128 image + 24 margin)
+						offset: 152 * index,
+						index,
+					})}
+				/>
+			) : (
+				<FlatList
+					style={styles.scrollView}
+					data={[]}
+					renderItem={() => null}
+					ListHeaderComponent={renderListHeader}
+					ListFooterComponent={renderListFooter}
+					showsVerticalScrollIndicator={false}
+					keyboardShouldPersistTaps="always"
+					scrollEnabled={!isSearchActive}
+				/>
+			)}
 		</SafeAreaView>
 	);
 };

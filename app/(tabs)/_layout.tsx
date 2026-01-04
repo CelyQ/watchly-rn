@@ -6,7 +6,7 @@ import {
 	useRouter,
 } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { Clock, Heart, Search, User } from "react-native-feather";
 import { authClient } from "@/lib/auth-client";
@@ -18,10 +18,9 @@ export default function TabLayout() {
 	const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
 	const [isLoadingSubscription, setIsLoadingSubscription] = useState(true);
 
-	const checkSubscription = useCallback(async () => {
+	const checkSubscription = async () => {
 		try {
 			const { data: subscriptions } = await authClient.subscription.list();
-			console.log({ subscriptions });
 			const activeSubscription = subscriptions?.find(
 				(sub) => sub.status === "active" || sub.status === "trialing",
 			);
@@ -31,19 +30,12 @@ export default function TabLayout() {
 			console.error("Error checking subscription:", error);
 			setIsLoadingSubscription(false);
 		}
-	}, []);
+	};
 
-	// Check subscription on mount
-	useEffect(() => {
+	// Check subscription when component gains focus (e.g., on mount or after returning from paywall)
+	useFocusEffect(() => {
 		void checkSubscription();
-	}, [checkSubscription]);
-
-	// Also check subscription when component gains focus (e.g., after returning from paywall)
-	useFocusEffect(
-		useCallback(() => {
-			void checkSubscription();
-		}, [checkSubscription]),
-	);
+	});
 
 	useEffect(() => {
 		if (hasActiveSubscription && pathname === "/paywall") {

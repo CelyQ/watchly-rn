@@ -1,17 +1,12 @@
-import { useRouter } from "expo-router";
-import React from "react";
-import {
-	ScrollView,
-	StyleSheet,
-	Text,
-	TouchableOpacity,
-	View,
-} from "react-native";
+import type { useRouter } from "expo-router";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { ArrowLeft } from "react-native-feather";
 
-export const ShowDetailSkeleton: React.FC<{
+export const ShowDetailSkeleton = ({
+	router,
+}: {
 	router: ReturnType<typeof useRouter>;
-}> = ({ router }) => {
+}) => {
 	return (
 		<ScrollView
 			style={styles.container}
@@ -151,5 +146,3 @@ const styles = StyleSheet.create({
 		marginBottom: 16,
 	},
 });
-
-

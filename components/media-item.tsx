@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, Image, TouchableOpacity } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Search } from "react-native-feather";
 
 type MediaItemProps = {
@@ -20,7 +20,12 @@ export const MediaItem: React.FC<MediaItemProps> = ({
 			activeOpacity={0.8}
 			style={styles.mediaItem}
 		>
-			<Image source={{ uri: imageUrl }} style={styles.mediaImage} />
+			<Image
+				source={{ uri: imageUrl }}
+				style={styles.mediaImage}
+				resizeMode="cover"
+				defaultSource={require("@/assets/1024.png")}
+			/>
 			{isSelected && (
 				<View style={styles.selectedBadge}>
 					<Search stroke="#fff" width={16} height={16} />

@@ -1,12 +1,12 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
 	Animated,
+	FlatList,
 	Image,
 	Pressable,
-	ScrollView,
 	StatusBar,
 	StyleSheet,
 	Text,
@@ -55,6 +55,10 @@ const TvMediaCard = ({
 			? progress.watchedEpisodes / progress.totalEpisodes
 			: 0;
 
+	// Check if imageUrl is a placeholder URL
+	const isPlaceholder = imageUrl.includes("via.placeholder.com");
+	const hasRealImage = imageUrl && !isPlaceholder;
+
 	return (
 		<TouchableOpacity
 			onPress={onPress}
@@ -62,13 +66,21 @@ const TvMediaCard = ({
 			style={styles.mediaCard}
 		>
 			{/* Poster */}
-			<Image
-				source={{ uri: imageUrl }}
-				style={[
-					styles.mediaCardImage,
-					progress?.isFullyWatched && styles.imageWatched,
-				]}
-			/>
+			{hasRealImage ? (
+				<Image
+					key={imageUrl} // Force re-render when URL changes
+					source={{ uri: imageUrl }}
+					style={[
+						styles.mediaCardImage,
+						progress?.isFullyWatched && styles.imageWatched,
+					]}
+					defaultSource={require("@/assets/1024.png")}
+				/>
+			) : (
+				<View style={[styles.mediaCardImage, styles.imagePlaceholder]}>
+					<Text style={styles.placeholderText}>{title[0] ?? "?"}</Text>
+				</View>
+			)}
 
 			{/* Progress bar (only for in-progress shows) */}
 			{hasProgress && !progress.isFullyWatched && (
@@ -126,16 +138,35 @@ const MovieMediaCard = ({
 	onPress: () => void;
 	isWatched?: boolean;
 }) => {
+	// Check if imageUrl is a placeholder URL
+	const isPlaceholder = imageUrl.includes("via.placeholder.com");
+	const hasRealImage = imageUrl && !isPlaceholder;
+
 	return (
 		<TouchableOpacity
 			onPress={onPress}
 			activeOpacity={0.8}
 			style={styles.mediaCard}
 		>
-			<Image
-				source={{ uri: imageUrl }}
-				style={[styles.mediaCardImage, isWatched && styles.imageWatched]}
-			/>
+			{hasRealImage ? (
+				<Image
+					key={imageUrl} // Force re-render when URL changes
+					source={{ uri: imageUrl }}
+					style={[styles.mediaCardImage, isWatched && styles.imageWatched]}
+					resizeMode="cover"
+					defaultSource={require("@/assets/1024.png")}
+				/>
+			) : (
+				<View
+					style={[
+						styles.mediaCardImage,
+						styles.imagePlaceholder,
+						isWatched && styles.imageWatched,
+					]}
+				>
+					<Text style={styles.placeholderText}>{title[0] ?? "?"}</Text>
+				</View>
+			)}
 
 			{isWatched && (
 				<View style={styles.completedBadge}>
@@ -204,7 +235,7 @@ const Index = () => {
 	);
 
 	// Create lookup maps for progress
-	const tvProgressMap = useMemo(() => {
+	const tvProgressMap = (() => {
 		const map = new Map<string, TvShowProgress>();
 		if (progressData?.tvShows) {
 			for (const show of progressData.tvShows as TvShowProgress[]) {
@@ -212,9 +243,9 @@ const Index = () => {
 			}
 		}
 		return map;
-	}, [progressData?.tvShows]);
+	})();
 
-	const movieProgressMap = useMemo(() => {
+	const movieProgressMap = (() => {
 		const map = new Map<string, MovieProgress>();
 		if (progressData?.movies) {
 			for (const movie of progressData.movies as MovieProgress[]) {
@@ -222,7 +253,7 @@ const Index = () => {
 			}
 		}
 		return map;
-	}, [progressData?.movies]);
+	})();
 
 	const likes = likesData?.likes ?? [];
 
@@ -263,7 +294,7 @@ const Index = () => {
 	const hasDetailsError = detailQueries.some((query) => query.error);
 
 	// Group liked items by media type
-	const { shows, movies } = useMemo(() => {
+	const { shows, movies } = (() => {
 		const showsList: Array<{
 			like: { id: number; imdbId: string; mediaType: "movie" | "tv" };
 			details:
@@ -298,7 +329,7 @@ const Index = () => {
 		});
 
 		return { shows: showsList, movies: moviesList };
-	}, [detailQueries]);
+	})();
 
 	const isMyShowsLoading = isLikesLoading || isLoadingDetails;
 	const isMyMoviesLoading = isLikesLoading || isLoadingDetails;
@@ -309,150 +340,193 @@ const Index = () => {
 		likesError ||
 		(hasDetailsError ? new Error("Failed to load movie details") : null);
 
-	useFocusEffect(
-		useCallback(() => {
-			void refetchLikes();
-			void refetchProgress();
-		}, [refetchLikes, refetchProgress]),
-	);
+	useFocusEffect(() => {
+		void refetchLikes();
+		void refetchProgress();
+	});
+
+	const sections = [
+		{
+			type: "shows",
+			label: "MY LIST",
+			title: "Shows",
+			items: shows,
+			isLoading: isMyShowsLoading,
+			error: showsError,
+		},
+		{
+			type: "movies",
+			label: "MY LIST",
+			title: "Movies",
+			items: movies,
+			isLoading: isMyMoviesLoading,
+			error: moviesError,
+		},
+	];
+
+	const renderSection = ({
+		item: section,
+	}: {
+		item: (typeof sections)[number];
+	}) => {
+		const renderItem = ({
+			item,
+		}: {
+			item: (typeof section.items)[number];
+			index: number;
+		}) => {
+			const title = item.details?.title?.titleText?.text ?? "";
+			const imageUrl = item.details?.title?.primaryImage?.url ?? "";
+
+			if (section.type === "shows") {
+				const tvProgress = tvProgressMap.get(item.like.imdbId);
+				return (
+					<TvMediaCard
+						title={title}
+						imageUrl={imageUrl}
+						onPress={() =>
+							router.push({
+								pathname: "/show-detail/[id]",
+								params: { id: item.like.imdbId },
+							})
+						}
+						progress={tvProgress}
+					/>
+				);
+			}
+
+			const movieProgress = movieProgressMap.get(item.like.imdbId);
+			return (
+				<MovieMediaCard
+					title={title}
+					imageUrl={imageUrl}
+					onPress={() =>
+						router.push({
+							pathname: "/show-detail/[id]",
+							params: { id: item.like.imdbId },
+						})
+					}
+					isWatched={movieProgress?.isWatched}
+				/>
+			);
+		};
+
+		const renderHeader = () => {
+			if (section.isLoading) {
+				return (
+					<View style={styles.skeletonRow}>
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+					</View>
+				);
+			}
+			return null;
+		};
+
+		const renderEmpty = () => {
+			if (!section.isLoading && !section.error && section.items.length === 0) {
+				return (
+					<View style={styles.emptyStateContainer}>
+						<Text style={styles.emptyStateText}>
+							Your {section.type} list is empty
+						</Text>
+						<Pressable onPress={() => router.push("/")}>
+							<Text style={styles.discoveryLinkText}>
+								Discover new {section.type} →
+							</Text>
+						</Pressable>
+					</View>
+				);
+			}
+			return null;
+		};
+
+		const getItemLayout = (_: unknown, index: number) => ({
+			length: CARD_WIDTH + 12, // card width + marginRight
+			offset: (CARD_WIDTH + 12) * index,
+			index,
+		});
+
+		// Show loading state with horizontal skeleton row
+		if (section.isLoading) {
+			return (
+				<View style={styles.section}>
+					<Text style={styles.sectionLabel}>{section.label}</Text>
+					<Text style={styles.sectionTitle}>{section.title}</Text>
+					<View style={styles.skeletonRow}>
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+						<MediaCardSkeleton />
+					</View>
+				</View>
+			);
+		}
+
+		// Show error state
+		if (section.error) {
+			return (
+				<View style={styles.section}>
+					<Text style={styles.sectionLabel}>{section.label}</Text>
+					<Text style={styles.sectionTitle}>{section.title}</Text>
+					<View style={styles.errorContainer}>
+						<Text style={styles.errorText}>
+							Error loading {section.type}: {section.error.message}
+						</Text>
+					</View>
+				</View>
+			);
+		}
+
+		return (
+			<View style={styles.section}>
+				<Text style={styles.sectionLabel}>{section.label}</Text>
+				<Text style={styles.sectionTitle}>{section.title}</Text>
+
+				{section.items.length === 0 ? (
+					renderEmpty()
+				) : (
+					<FlatList
+						data={section.items}
+						renderItem={renderItem}
+						keyExtractor={(item, index) => {
+							const imageUrl = item.details?.title?.primaryImage?.url ?? "";
+							return `${item.like.id}-${index}-${imageUrl}`;
+						}}
+						horizontal
+						showsHorizontalScrollIndicator={false}
+						style={styles.mediaScroll}
+						contentContainerStyle={styles.mediaScrollContent}
+						getItemLayout={getItemLayout}
+						removeClippedSubviews={true}
+						ListHeaderComponent={renderHeader}
+					/>
+				)}
+			</View>
+		);
+	};
 
 	return (
 		<SafeAreaView style={styles.container}>
 			<StatusBar barStyle="light-content" backgroundColor="#000" />
 
-			<Animated.ScrollView
+			<FlatList
 				style={styles.scrollView}
+				data={sections}
+				renderItem={renderSection}
+				keyExtractor={(item) => item.type}
 				showsVerticalScrollIndicator={false}
-				scrollEventThrottle={16}
 				contentContainerStyle={{ paddingTop: HEADER_HEIGHT }}
-			>
-				<View style={styles.section}>
-					<Text style={styles.sectionLabel}>MY LIST</Text>
-					<Text style={styles.sectionTitle}>Shows</Text>
-
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						style={styles.mediaScroll}
-						contentContainerStyle={styles.mediaScrollContent}
-					>
-						{isMyShowsLoading && (
-							<>
-								<MediaCardSkeleton />
-								<MediaCardSkeleton />
-								<MediaCardSkeleton />
-							</>
-						)}
-						{showsError && (
-							<View style={styles.errorContainer}>
-								<Text style={styles.errorText}>
-									Error loading shows: {showsError.message}
-								</Text>
-							</View>
-						)}
-						{!isMyShowsLoading && !showsError && shows.length === 0 && (
-							<View style={styles.emptyStateContainer}>
-								<Text style={styles.emptyStateText}>
-									Your shows list is empty
-								</Text>
-								<Pressable onPress={() => router.push("/")}>
-									<Text style={styles.discoveryLinkText}>
-										Discover new shows →
-									</Text>
-								</Pressable>
-							</View>
-						)}
-						{shows.map((item, i) => {
-							const title = item.details?.title?.titleText?.text ?? "";
-							const imageUrl = item.details?.title?.primaryImage?.url;
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", title);
-							const tvProgress = tvProgressMap.get(item.like.imdbId);
-
-							return (
-								<TvMediaCard
-									key={`${item.like.id}-${i}`}
-									title={title}
-									imageUrl={imageUrl ?? placeholder.toString()}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: item.like.imdbId },
-										})
-									}
-									progress={tvProgress}
-								/>
-							);
-						})}
-					</ScrollView>
-				</View>
-
-				<View style={styles.section}>
-					<Text style={styles.sectionLabel}>MY LIST</Text>
-					<Text style={styles.sectionTitle}>Movies</Text>
-
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						style={styles.mediaScroll}
-						contentContainerStyle={styles.mediaScrollContent}
-					>
-						{isMyMoviesLoading && (
-							<>
-								<MediaCardSkeleton />
-								<MediaCardSkeleton />
-								<MediaCardSkeleton />
-							</>
-						)}
-						{moviesError && (
-							<View style={styles.errorContainer}>
-								<Text style={styles.errorText}>
-									Error loading movies: {moviesError.message}
-								</Text>
-							</View>
-						)}
-						{!isMyMoviesLoading && !moviesError && movies.length === 0 && (
-							<View style={styles.emptyStateContainer}>
-								<Text style={styles.emptyStateText}>
-									Your movies list is empty
-								</Text>
-								<Pressable onPress={() => router.push("/")}>
-									<Text style={styles.discoveryLinkText}>
-										Discover new movies →
-									</Text>
-								</Pressable>
-							</View>
-						)}
-						{movies.map((item, i) => {
-							const title = item.details?.title?.titleText?.text ?? "";
-							const imageUrl = item.details?.title?.primaryImage?.url;
-							const placeholder = new URL(
-								"https://via.placeholder.com/150x225/333/fff",
-							);
-							placeholder.searchParams.set("text", title);
-							const movieProgress = movieProgressMap.get(item.like.imdbId);
-
-							return (
-								<MovieMediaCard
-									key={`${item.like.id}-${i}`}
-									title={title}
-									imageUrl={imageUrl ?? placeholder.toString()}
-									onPress={() =>
-										router.push({
-											pathname: "/show-detail/[id]",
-											params: { id: item.like.imdbId },
-										})
-									}
-									isWatched={movieProgress?.isWatched}
-								/>
-							);
-						})}
-					</ScrollView>
-				</View>
-				<View style={{ height: 80 }} />
-			</Animated.ScrollView>
+				removeClippedSubviews={true}
+				initialNumToRender={2}
+				maxToRenderPerBatch={2}
+				windowSize={5}
+				ListFooterComponent={<View style={{ height: 80 }} />}
+			/>
 		</SafeAreaView>
 	);
 };
@@ -485,6 +559,13 @@ const styles = StyleSheet.create({
 		marginLeft: -4,
 	},
 	mediaScrollContent: {
+		paddingRight: 16,
+		paddingLeft: 4,
+	},
+	skeletonRow: {
+		flexDirection: "row",
+		marginLeft: -4,
+		paddingLeft: 4,
 		paddingRight: 16,
 	},
 	loadingText: {
@@ -566,6 +647,15 @@ const styles = StyleSheet.create({
 		height: CARD_IMAGE_HEIGHT,
 		borderRadius: 10,
 		backgroundColor: "#1a1a1a",
+	},
+	imagePlaceholder: {
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	placeholderText: {
+		color: "#333",
+		fontSize: 32,
+		fontWeight: "bold",
 	},
 	imageWatched: {
 		opacity: 0.7,

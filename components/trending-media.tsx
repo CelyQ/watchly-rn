@@ -1,15 +1,15 @@
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useRef } from "react";
 import {
-	Animated,
+	FlatList,
 	Image,
-	ScrollView,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
 	View,
 } from "react-native";
 import { $api } from "@/lib/api";
+import { MediaCardSkeleton } from "./media-card-skeleton";
+import { MovieCard } from "./movie-card";
 
 const CARD_WIDTH = 120;
 const CARD_IMAGE_HEIGHT = 180;
@@ -38,13 +38,11 @@ type MovieProgress = {
 
 // Media card with optional progress info
 const MediaCard = ({
-	id,
 	title,
 	imageUrl,
 	onPress,
 	progress,
 }: {
-	id: string;
 	title: string;
 	imageUrl: string;
 	onPress: () => void;
@@ -75,6 +73,8 @@ const MediaCard = ({
 					styles.mediaCardImage,
 					progress?.isFullyWatched && styles.imageWatched,
 				]}
+				resizeMode="cover"
+				defaultSource={require("@/assets/1024.png")}
 			/>
 
 			{/* Progress bar (only for in-progress shows) */}
@@ -121,79 +121,6 @@ const MediaCard = ({
 	);
 };
 
-// Skeleton card component for loading state
-const MediaCardSkeleton = () => {
-	const shimmerAnim = useRef(new Animated.Value(0)).current;
-
-	useEffect(() => {
-		Animated.loop(
-			Animated.sequence([
-				Animated.timing(shimmerAnim, {
-					toValue: 1,
-					duration: 1000,
-					useNativeDriver: true,
-				}),
-				Animated.timing(shimmerAnim, {
-					toValue: 0,
-					duration: 1000,
-					useNativeDriver: true,
-				}),
-			]),
-		).start();
-	}, [shimmerAnim]);
-
-	const opacity = shimmerAnim.interpolate({
-		inputRange: [0, 1],
-		outputRange: [0.3, 0.6],
-	});
-
-	return (
-		<View style={styles.mediaCard}>
-			<Animated.View style={[styles.skeletonImage, { opacity }]} />
-			<Animated.View style={[styles.skeletonTitle, { opacity }]} />
-			<Animated.View style={[styles.skeletonSubtitle, { opacity }]} />
-		</View>
-	);
-};
-
-// Movie card with watched status
-const MovieCard = ({
-	title,
-	imageUrl,
-	onPress,
-	isWatched,
-}: {
-	title: string;
-	imageUrl: string;
-	onPress: () => void;
-	isWatched?: boolean;
-}) => {
-	return (
-		<TouchableOpacity
-			onPress={onPress}
-			activeOpacity={0.8}
-			style={styles.mediaCard}
-		>
-			<Image
-				source={{ uri: imageUrl }}
-				style={[styles.mediaCardImage, isWatched && styles.imageWatched]}
-			/>
-
-			{isWatched && (
-				<View style={styles.completedBadge}>
-					<Text style={styles.completedBadgeText}>✓</Text>
-				</View>
-			)}
-
-			<Text style={styles.mediaCardTitle} numberOfLines={2}>
-				{title}
-			</Text>
-
-			{isWatched && <Text style={styles.episodeInfo}>Watched</Text>}
-		</TouchableOpacity>
-	);
-};
-
 export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 	const router = useRouter();
 
@@ -233,7 +160,7 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 	const { data: progressData } = $api.useQuery("get", "/api/v1/progress/all");
 
 	// Create lookup maps for progress
-	const tvProgressMap = useMemo(() => {
+	const tvProgressMap = (() => {
 		const map = new Map<string, TvShowProgress>();
 		if (progressData?.tvShows) {
 			for (const show of progressData.tvShows as TvShowProgress[]) {
@@ -241,9 +168,9 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 			}
 		}
 		return map;
-	}, [progressData?.tvShows]);
+	})();
 
-	const movieProgressMap = useMemo(() => {
+	const movieProgressMap = (() => {
 		const map = new Map<string, MovieProgress>();
 		if (progressData?.movies) {
 			for (const movie of progressData.movies as MovieProgress[]) {
@@ -251,9 +178,9 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 			}
 		}
 		return map;
-	}, [progressData?.movies]);
+	})();
 
-	const trendingItems = useMemo(() => {
+	const trendingItems = (() => {
 		if (!trendingData?.pages) return [];
 		let previousCount = 0;
 		return trendingData.pages.flatMap((page) => {
@@ -263,11 +190,98 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 			previousCount = allNodes.length;
 			return newNodes;
 		});
-	}, [trendingData]);
+	})();
 
 	// Hide section if there's an error (backend API issue)
 	if (isError && !isLoading) {
 		return null;
+	}
+
+	const renderItem = ({
+		item,
+	}: {
+		item: (typeof trendingItems)[0];
+		index: number;
+	}) => {
+		const imageUrl = item.primaryImage.url;
+		const itemId = item.id;
+
+		if (mediaType === "tv") {
+			const tvProgress = tvProgressMap.get(itemId);
+			return (
+				<MediaCard
+					title={item.titleText.text}
+					imageUrl={imageUrl}
+					onPress={() =>
+						router.push({
+							pathname: "/show-detail/[id]",
+							params: { id: itemId },
+						})
+					}
+					progress={
+						tvProgress
+							? {
+									watchedEpisodes: tvProgress.watchedEpisodes,
+									totalEpisodes: tvProgress.totalEpisodes,
+									lastWatchedSeason: tvProgress.lastWatchedSeason,
+									lastWatchedEpisode: tvProgress.lastWatchedEpisode,
+									isFullyWatched: tvProgress.isFullyWatched,
+								}
+							: null
+					}
+				/>
+			);
+		}
+
+		// Movie
+		const movieProgress = movieProgressMap.get(itemId);
+		return (
+			<MovieCard
+				title={item.titleText.text}
+				imageUrl={imageUrl}
+				onPress={() =>
+					router.push({
+						pathname: "/show-detail/[id]",
+						params: { id: itemId },
+					})
+				}
+				isWatched={movieProgress?.isWatched}
+			/>
+		);
+	};
+
+	const renderFooter = () => {
+		if (isFetchingNextPage) {
+			return (
+				<View style={styles.skeletonRow}>
+					<MediaCardSkeleton />
+				</View>
+			);
+		}
+		return null;
+	};
+
+	const getItemLayout = (_: unknown, index: number) => ({
+		length: CARD_WIDTH + 12, // card width + marginRight
+		offset: (CARD_WIDTH + 12) * index,
+		index,
+	});
+
+	// Show skeleton loading state
+	if (isLoading) {
+		return (
+			<View style={styles.section}>
+				<Text style={styles.sectionLabel}>TRENDING</Text>
+				<Text style={styles.sectionTitle}>{title}</Text>
+				<View style={styles.skeletonRow}>
+					<MediaCardSkeleton />
+					<MediaCardSkeleton />
+					<MediaCardSkeleton />
+					<MediaCardSkeleton />
+					<MediaCardSkeleton />
+				</View>
+			</View>
+		);
 	}
 
 	return (
@@ -275,89 +289,24 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 			<Text style={styles.sectionLabel}>TRENDING</Text>
 			<Text style={styles.sectionTitle}>{title}</Text>
 
-			<ScrollView
+			<FlatList
+				data={trendingItems}
+				renderItem={renderItem}
+				keyExtractor={(item, index) => `${item.id}-${index}`}
 				horizontal
 				showsHorizontalScrollIndicator={false}
-				style={styles.mediaScroll}
 				contentContainerStyle={styles.mediaScrollContent}
-				onScroll={(event) => {
-					const { contentOffset, contentSize, layoutMeasurement } =
-						event.nativeEvent;
-					const scrollPosition = contentOffset.x;
-					const scrollWidth = contentSize.width;
-					const containerWidth = layoutMeasurement.width;
-					const distanceFromEnd = scrollWidth - scrollPosition - containerWidth;
-
-					const threshold = containerWidth * 2;
-					if (
-						distanceFromEnd < threshold &&
-						hasNextPage &&
-						!isFetchingNextPage
-					) {
+				style={styles.mediaScroll}
+				onEndReached={() => {
+					if (hasNextPage && !isFetchingNextPage) {
 						void fetchNextPage();
 					}
 				}}
-				scrollEventThrottle={16}
-			>
-				{isLoading && (
-					<>
-						<MediaCardSkeleton />
-						<MediaCardSkeleton />
-						<MediaCardSkeleton />
-					</>
-				)}
-				{trendingItems?.map((item, i) => {
-					const imageUrl = item.primaryImage.url;
-					const itemId = item.id;
-
-					if (mediaType === "tv") {
-						const tvProgress = tvProgressMap.get(itemId);
-						return (
-							<MediaCard
-								key={`${itemId}-${i}`}
-								id={itemId}
-								title={item.titleText.text}
-								imageUrl={imageUrl}
-								onPress={() =>
-									router.push({
-										pathname: "/show-detail/[id]",
-										params: { id: itemId },
-									})
-								}
-								progress={
-									tvProgress
-										? {
-												watchedEpisodes: tvProgress.watchedEpisodes,
-												totalEpisodes: tvProgress.totalEpisodes,
-												lastWatchedSeason: tvProgress.lastWatchedSeason,
-												lastWatchedEpisode: tvProgress.lastWatchedEpisode,
-												isFullyWatched: tvProgress.isFullyWatched,
-											}
-										: null
-								}
-							/>
-						);
-					}
-
-					// Movie
-					const movieProgress = movieProgressMap.get(itemId);
-					return (
-						<MovieCard
-							key={`${itemId}-${i}`}
-							title={item.titleText.text}
-							imageUrl={imageUrl}
-							onPress={() =>
-								router.push({
-									pathname: "/show-detail/[id]",
-									params: { id: itemId },
-								})
-							}
-							isWatched={movieProgress?.isWatched}
-						/>
-					);
-				})}
-				{isFetchingNextPage && <MediaCardSkeleton />}
-			</ScrollView>
+				onEndReachedThreshold={0.5}
+				ListFooterComponent={renderFooter}
+				getItemLayout={getItemLayout}
+				removeClippedSubviews={true}
+			/>
 		</View>
 	);
 };
@@ -384,34 +333,20 @@ const styles = StyleSheet.create({
 	},
 	mediaScrollContent: {
 		paddingRight: 16,
+		paddingLeft: 4,
+	},
+	skeletonRow: {
+		flexDirection: "row",
+		marginLeft: -4,
+		paddingLeft: 4,
+		paddingRight: 16,
 	},
 	loadingText: {
 		color: "#fff",
 		fontSize: 16,
 		fontWeight: "500",
 	},
-	// Skeleton Styles
-	skeletonImage: {
-		width: CARD_WIDTH,
-		height: CARD_IMAGE_HEIGHT,
-		borderRadius: 10,
-		backgroundColor: "#1a1a1a",
-	},
-	skeletonTitle: {
-		height: 14,
-		width: CARD_WIDTH * 0.8,
-		borderRadius: 4,
-		backgroundColor: "#1a1a1a",
-		marginTop: 8,
-	},
-	skeletonSubtitle: {
-		height: 10,
-		width: CARD_WIDTH * 0.5,
-		borderRadius: 4,
-		backgroundColor: "#1a1a1a",
-		marginTop: 4,
-	},
-	// Media Card Styles
+	// Media Card Styles (for MediaCard component)
 	mediaCard: {
 		width: CARD_WIDTH,
 		marginRight: 12,
