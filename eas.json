@@ -14,10 +14,34 @@
 				"buildType": "apk",
 				"credentialsSource": "remote"
 			}
+		},
+		"preview": {
+			"distribution": "internal",
+			"ios": {
+				"buildConfiguration": "Release",
+				"simulator": false
+			},
+			"android": {
+				"buildType": "apk",
+				"credentialsSource": "remote"
+			}
+		},
+		"production": {
+			"distribution": "store",
+			"ios": {
+				"buildConfiguration": "Release"
+			},
+			"android": {
+				"buildType": "app-bundle",
+				"credentialsSource": "remote"
+			}
 		}
 	},
 	"submit": {
 		"production": {
+			"android": {
+				"track": "internal"
+			},
 			"ios": {
 				"appleId": "paul.opmann@kakao.com",
 				"ascAppId": "6746103299",
