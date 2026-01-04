@@ -265,6 +265,11 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 		});
 	}, [trendingData]);
 
+	// Hide section if there's an error (backend API issue)
+	if (isError && !isLoading) {
+		return null;
+	}
+
 	return (
 		<View style={styles.section}>
 			<Text style={styles.sectionLabel}>TRENDING</Text>
@@ -300,11 +305,6 @@ export const TrendingMedia = ({ mediaType, title }: TrendingMediaProps) => {
 						<MediaCardSkeleton />
 						<MediaCardSkeleton />
 					</>
-				)}
-				{isError && (
-					<Text style={styles.loadingText}>
-						Error loading trending {mediaType === "tv" ? "shows" : "movies"}
-					</Text>
 				)}
 				{trendingItems?.map((item, i) => {
 					const imageUrl = item.primaryImage.url;

@@ -15,7 +15,7 @@ import {
 import { ArrowLeft } from "react-native-feather";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { queryClient } from "@/app/_layout";
-import { $api } from "@/lib/api";
+import { $api, fetchClient } from "@/lib/api";
 
 // Episode skeleton component
 const EpisodeSkeleton = ({ index }: { index: number }) => {
@@ -255,19 +255,46 @@ const SeasonScreen: React.FC = () => {
 		const episodesToMark: { seasonNumber: number; episodeNumber: number }[] =
 			[];
 
-		// 1) All episodes from previous seasons (1..seasonNumber-1)
-		const episodesPerSeason =
-			progressData?.tvShowProgress?.episodesPerSeason ?? [];
+		// 1) Fetch all episodes from previous seasons (1..seasonNumber-1)
+		if (seasonNumber > 1) {
+			try {
+				// Fetch episodes for all previous seasons in parallel
+				const previousSeasonNumbers = Array.from(
+					{ length: seasonNumber - 1 },
+					(_, i) => i + 1,
+				);
 
-		for (let s = 1; s < seasonNumber; s++) {
-			const totalEpisodesInSeason = episodesPerSeason[s - 1];
-			if (!totalEpisodesInSeason) continue;
+				const previousSeasonResults = await Promise.all(
+					previousSeasonNumbers.map((s) =>
+						fetchClient.GET("/api/v1/media/getTitleEpisodes", {
+							params: {
+								query: {
+									tt: imdbId,
+									seasonNumber: s,
+								},
+							},
+						}),
+					),
+				);
 
-			for (let ep = 1; ep <= totalEpisodesInSeason; ep++) {
-				episodesToMark.push({
-					seasonNumber: s,
-					episodeNumber: ep,
-				});
+				// Extract all episodes from previous seasons
+				for (let i = 0; i < previousSeasonResults.length; i++) {
+					const result = previousSeasonResults[i];
+					const seasonNum = previousSeasonNumbers[i];
+					if (!result?.data) continue;
+
+					const seasonEpisodeEdges =
+						result.data.title?.episodes?.episodes?.edges ?? [];
+					for (const edge of seasonEpisodeEdges) {
+						if (!edge) continue;
+						episodesToMark.push({
+							seasonNumber: seasonNum,
+							episodeNumber: edge.position,
+						});
+					}
+				}
+			} catch {
+				// If fetching previous seasons fails, continue with current season only
 			}
 		}
 
