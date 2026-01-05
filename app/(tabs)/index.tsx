@@ -428,7 +428,6 @@ const App = () => {
 				<TrendingMedia mediaType="tv" title="Shows" />
 				<TrendingMedia mediaType="movie" title="Movies" />
 				<RecommendationRails />
-				<View style={{ height: 100 }} />
 			</>
 		),
 		[],
@@ -502,11 +501,8 @@ const App = () => {
 					isSearchActive ? `${item.id}-${index}` : `empty-${index}`
 				}
 				ListHeaderComponent={listHeaderComponent}
-				ListFooterComponent={() => (
-					<View style={{ height: 100 + insets.bottom + 80 }} />
-				)}
 				contentContainerStyle={{
-					paddingBottom: insets.bottom + 80, // Tab bar height + extra padding to prevent clipping
+					paddingBottom: 49 + insets.bottom, // Tab bar height (49px) + safe area only
 				}}
 				showsVerticalScrollIndicator={false}
 				keyboardShouldPersistTaps="always"
