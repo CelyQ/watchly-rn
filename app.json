@@ -22,7 +22,8 @@
 			"supportsTablet": true,
 			"bundleIdentifier": "com.popmann.watchly",
 			"infoPlist": {
-				"ITSAppUsesNonExemptEncryption": false
+				"ITSAppUsesNonExemptEncryption": false,
+				"NSCameraUsageDescription": "This app does not use the camera. This permission may be referenced by some dependencies for compatibility purposes. Most likely Stripe uses it."
 			},
 			"entitlements": {
 				"com.apple.developer.applesignin": ["Default"]
