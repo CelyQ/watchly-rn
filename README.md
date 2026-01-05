@@ -2,6 +2,8 @@
 
 A React Native mobile application built with Expo.
 
+The backend repository can be found at [watchly](https://github.com/CelyQ/watchly).
+
 ## Running the Project
 
 ### Prerequisites
@@ -44,7 +46,7 @@ This project uses [Biome](https://biomejs.dev/) for code formatting and linting.
 
 ### Generate API Types
 
-The `generate-api-types` script generates TypeScript types from your backend API's OpenAPI specification.
+The `generate-api-types` script generates TypeScript types from your backend API's OpenAPI specification. The backend repository is available at [watchly](https://github.com/CelyQ/watchly).
 
 **Usage:**
 
