@@ -19,7 +19,11 @@ A React Native mobile application built with Expo.
    bun install
    ```
 
-2. Start the development server:
+2. Set up environment variables:
+
+   Create a `.env` file in the root directory and add the required environment variables. You can check the required variables in `.env.example` file.
+
+3. Start the development server:
 
    ```bash
    bun run ios    # For iOS
