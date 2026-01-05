@@ -57,6 +57,7 @@
 		"typescript": "~5.9.2"
 	},
 	"private": true,
+	"license": "MIT",
 	"packageManager": "bun@1.0.0",
 	"overrides": {
 		"expo-linking": "~8.0.11"
