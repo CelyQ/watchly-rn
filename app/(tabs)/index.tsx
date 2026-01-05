@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	Animated,
 	FlatList,
@@ -14,7 +14,10 @@ import {
 	View,
 } from "react-native";
 import { Search, X } from "react-native-feather";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+	SafeAreaView,
+	useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { RecommendationRails } from "@/components/recommendation-rail";
 import { TrendingMedia } from "@/components/trending-media";
 import { $api } from "@/lib/api";
@@ -92,8 +95,7 @@ const AnimatedSearchResult = ({
 				useNativeDriver: true,
 			}),
 		]).start();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [index]); // Only depend on index, animations are stable refs
+	}, [fadeAnim, slideAnim, index]);
 
 	const title = item.media_type === "movie" ? item.title : item.name;
 	const releaseDate =
@@ -289,9 +291,11 @@ const calculateSimilarity = (str1: string, str2: string): number => {
 
 const App = () => {
 	const router = useRouter();
+	const insets = useSafeAreaInsets();
 	const [searchQuery, setSearchQuery] = useState("");
 	const debouncedSearchQuery = useDebouncedValue(searchQuery, 400);
 	const inputRef = useRef<TextInput>(null);
+	const searchBarRef = useRef<View>(null);
 
 	const { data: searchResults, isLoading: isSearchLoading } = $api.useQuery(
 		"get",
@@ -354,37 +358,111 @@ const App = () => {
 
 	const isSearchActive = searchQuery.trim().length > 0;
 
-	const clearSearch = () => {
+	const clearSearch = useCallback(() => {
 		setSearchQuery("");
 		inputRef.current?.blur();
 		Keyboard.dismiss();
-	};
+	}, []);
 
-	const renderSearchResult = ({
-		item,
-		index,
-	}: {
-		item: (typeof sortedSearchResults)[number];
-		index: number;
-	}) => (
-		<AnimatedSearchResult
-			item={item}
-			index={index}
-			onPress={() =>
-				router.push({
-					pathname: "/show-detail/[id]",
-					params: { id: item.id },
-				})
-			}
-			tvProgress={tvProgressMap.get(item.id)}
-			movieProgress={movieProgressMap.get(item.id)}
-		/>
+	const renderSearchResult = useCallback(
+		({
+			item,
+			index,
+		}: {
+			item: NonNullable<typeof sortedSearchResults>[number];
+			index: number;
+		}) => (
+			<AnimatedSearchResult
+				item={item}
+				index={index}
+				onPress={() =>
+					router.push({
+						pathname: "/show-detail/[id]",
+						params: { id: item.id },
+					})
+				}
+				tvProgress={tvProgressMap.get(item.id)}
+				movieProgress={movieProgressMap.get(item.id)}
+			/>
+		),
+		[tvProgressMap, movieProgressMap, router],
 	);
 
-	const renderListHeader = () => (
-		<>
-			{/* Search Bar */}
-			<View style={styles.searchBarWrapper}>
+	const renderSearchHeader = useCallback(
+		() => (
+			<View style={styles.searchResultsSection}>
+				<View style={styles.resultsHeader}>
+					<Text style={styles.resultsTitle}>Results</Text>
+					{sortedSearchResults && sortedSearchResults.length > 0 && (
+						<Text style={styles.resultsCount}>
+							{sortedSearchResults.length} found
+						</Text>
+					)}
+				</View>
+
+				{isSearchLoading && (
+					<View>
+						<SearchResultSkeleton />
+						<SearchResultSkeleton />
+						<SearchResultSkeleton />
+					</View>
+				)}
+
+				{!isSearchLoading && sortedSearchResults?.length === 0 && (
+					<View style={styles.emptyState}>
+						<Search stroke="#333" width={48} height={48} />
+						<Text style={styles.emptyStateText}>No results found</Text>
+						<Text style={styles.emptyStateSubtext}>
+							Try a different search term
+						</Text>
+					</View>
+				)}
+			</View>
+		),
+		[sortedSearchResults, isSearchLoading],
+	);
+
+	const renderMainContent = useCallback(
+		() => (
+			<>
+				<TrendingMedia mediaType="tv" title="Shows" />
+				<TrendingMedia mediaType="movie" title="Movies" />
+				<RecommendationRails />
+				<View style={{ height: 100 }} />
+			</>
+		),
+		[],
+	);
+
+	const listData = useMemo(
+		() => (isSearchActive ? (sortedSearchResults ?? []) : []),
+		[isSearchActive, sortedSearchResults],
+	);
+
+	const renderItem = useCallback(
+		({ item, index }: { item: unknown; index: number }) => {
+			if (isSearchActive && item) {
+				return renderSearchResult({
+					item: item as NonNullable<typeof sortedSearchResults>[number],
+					index,
+				});
+			}
+			return null;
+		},
+		[isSearchActive, renderSearchResult],
+	);
+
+	const listHeaderComponent = useCallback(
+		() => <>{isSearchActive ? renderSearchHeader() : renderMainContent()}</>,
+		[isSearchActive, renderSearchHeader, renderMainContent],
+	);
+
+	return (
+		<SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+			<StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+
+			{/* Search Bar - Always rendered outside FlatList to maintain focus */}
+			<View ref={searchBarRef} style={styles.searchBarWrapper}>
 				<View style={styles.searchBarContainer}>
 					<Search
 						stroke="#666"
@@ -409,95 +487,43 @@ const App = () => {
 						</Pressable>
 					)}
 				</View>
+				{isSearchActive && (
+					<Pressable onPress={clearSearch} style={styles.cancelButton}>
+						<Text style={styles.cancelButtonText}>Cancel</Text>
+					</Pressable>
+				)}
 			</View>
 
-			{/* Search Results Header */}
-			{isSearchActive && (
-				<View style={styles.searchResultsSection}>
-					<View style={styles.resultsHeader}>
-						<Text style={styles.resultsTitle}>Results</Text>
-						{sortedSearchResults && sortedSearchResults.length > 0 && (
-							<Text style={styles.resultsCount}>
-								{sortedSearchResults.length} found
-							</Text>
-						)}
-					</View>
-
-					{isSearchLoading && (
-						<View>
-							<SearchResultSkeleton />
-							<SearchResultSkeleton />
-							<SearchResultSkeleton />
-						</View>
-					)}
-
-					{!isSearchLoading && sortedSearchResults?.length === 0 && (
-						<View style={styles.emptyState}>
-							<Search stroke="#333" width={48} height={48} />
-							<Text style={styles.emptyStateText}>No results found</Text>
-							<Text style={styles.emptyStateSubtext}>
-								Try a different search term
-							</Text>
-						</View>
-					)}
-				</View>
-			)}
-		</>
-	);
-
-	const renderListFooter = () => (
-		<>
-			{/* Trending Content */}
-			{!isSearchActive && (
-				<>
-					<TrendingMedia mediaType="tv" title="Shows" />
-					<TrendingMedia mediaType="movie" title="Movies" />
-				</>
-			)}
-
-			{/* Personalized Recommendations */}
-			{!isSearchActive && <RecommendationRails />}
-
-			<View style={{ height: 100 }} />
-		</>
-	);
-
-	return (
-		<SafeAreaView style={styles.container}>
-			<StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
-
-			{isSearchActive && !isSearchLoading && sortedSearchResults ? (
-				<FlatList
-					style={styles.scrollView}
-					data={sortedSearchResults}
-					renderItem={renderSearchResult}
-					keyExtractor={(item, index) => `${item.id}-${index}`}
-					ListHeaderComponent={renderListHeader}
-					ListFooterComponent={renderListFooter}
-					showsVerticalScrollIndicator={false}
-					keyboardShouldPersistTaps="always"
-					removeClippedSubviews={true}
-					initialNumToRender={10}
-					maxToRenderPerBatch={10}
-					windowSize={10}
-					getItemLayout={(_, index) => ({
-						length: 152, // Approximate height of search result item (128 image + 24 margin)
-						offset: 152 * index,
-						index,
-					})}
-				/>
-			) : (
-				<FlatList
-					style={styles.scrollView}
-					data={[]}
-					renderItem={() => null}
-					ListHeaderComponent={renderListHeader}
-					ListFooterComponent={renderListFooter}
-					showsVerticalScrollIndicator={false}
-					keyboardShouldPersistTaps="always"
-					scrollEnabled={!isSearchActive}
-				/>
-			)}
+			<FlatList
+				style={styles.scrollView}
+				data={listData}
+				renderItem={renderItem}
+				keyExtractor={(item, index) =>
+					isSearchActive ? `${item.id}-${index}` : `empty-${index}`
+				}
+				ListHeaderComponent={listHeaderComponent}
+				ListFooterComponent={() => (
+					<View style={{ height: 100 + insets.bottom + 80 }} />
+				)}
+				contentContainerStyle={{
+					paddingBottom: insets.bottom + 80, // Tab bar height + extra padding to prevent clipping
+				}}
+				showsVerticalScrollIndicator={false}
+				keyboardShouldPersistTaps="always"
+				removeClippedSubviews={isSearchActive}
+				initialNumToRender={isSearchActive ? 10 : 1}
+				maxToRenderPerBatch={isSearchActive ? 10 : 1}
+				windowSize={isSearchActive ? 10 : 5}
+				getItemLayout={
+					isSearchActive
+						? (_, index) => ({
+								length: 152, // Approximate height of search result item (128 image + 24 margin)
+								offset: 152 * index,
+								index,
+							})
+						: undefined
+				}
+			/>
 		</SafeAreaView>
 	);
 };
@@ -514,6 +540,9 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 16,
 		paddingTop: 12,
 		paddingBottom: 8,
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 8,
 	},
 	searchBarContainer: {
 		flexDirection: "row",
@@ -522,6 +551,17 @@ const styles = StyleSheet.create({
 		borderRadius: 12,
 		paddingHorizontal: 14,
 		height: 48,
+		flex: 1,
+	},
+	cancelButton: {
+		paddingHorizontal: 12,
+		paddingVertical: 12,
+		justifyContent: "center",
+	},
+	cancelButtonText: {
+		color: "#fff",
+		fontSize: 16,
+		fontWeight: "500",
 	},
 	searchBarIcon: {
 		marginRight: 10,
